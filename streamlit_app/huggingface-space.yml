@@ -1,0 +1,17 @@
+title: LinkedIn Job Scraper
+emoji: 🔍
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+sdk_version: 1.28.0
+app_file: app.py
+pinned: false
+license: mit
+duplicated_from: yourusername/linkedin-job-scraper
+
+build:
+  python_version: "3.11"
+  dependencies:
+    - playwright-core
+    - playwright
+    - chromium 
