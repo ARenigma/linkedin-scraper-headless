@@ -1,0 +1,7 @@
+playwright==1.35.0
+pandas==2.0.2
+tqdm==4.65.0
+structlog==23.1.0
+openpyxl==3.1.2
+google-api-python-client==2.90.0
+nest_asyncio==1.5.6 

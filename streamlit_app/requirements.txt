@@ -1,7 +1,0 @@
-playwright==1.37.0
-pandas==2.1.0
-tqdm==4.66.1
-structlog==23.1.0
-openpyxl==3.1.2
-streamlit==1.45.0
-pydantic==2.5.0 
