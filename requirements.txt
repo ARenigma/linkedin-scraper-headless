@@ -1,5 +1,6 @@
+numpy==2.2.5
 playwright==1.35.0
-pandas==2.0.2
+pandas==2.2.3
 tqdm==4.65.0
 structlog==23.1.0
 openpyxl==3.1.2
