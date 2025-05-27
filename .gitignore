@@ -96,3 +96,6 @@ resume_state.json
 
 # Ignore local bat files
 *.bat
+
+# Environment variables
+.env
