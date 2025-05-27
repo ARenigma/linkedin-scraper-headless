@@ -29,9 +29,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install system dependencies for Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2t64 \
+            libnss3 \
+            libxss1 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libxcomposite1 \
+            libxrandr2 \
+            libgbm1 \
+            libgtk-3-0 \
+            libpango-1.0-0 \
+            libdrm2 \
+            libxdamage1 \
+            libxfixes3 \
+            libx11-xcb1 \
+            libxcb1 \
+            fonts-liberation \
+            xdg-utils \
+            libasound2-data
+
       - name: Install Playwright and Chromium
         run: |
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium
+
 
       - name: Recreate service account key file
         run: |
