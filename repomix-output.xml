@@ -1,0 +1,3412 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+__init__.py
+.gitignore
+add_hyperlinks_to_existing.py
+browser_utils.py
+config.py
+Dockerfile
+job_details.py
+job_scraper.py
+linkedin_auth.py
+main.py
+README.md
+requirements.txt
+state_manager.py
+test_hyperlinks.py
+test_upload_with_keyfile.py
+test_upload.py
+upload_to_drive.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="__init__.py">
+"""
+LinkedIn Job Scraper Streamlit App
+"""
+
+__version__ = "0.1.0"
+__author__ = "LinkedIn Job Scraper Team"
+__description__ = "A Streamlit app for LinkedIn job scraping"
+</file>
+
+<file path=".gitignore">
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+debug.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# mypy
+.mypy_cache/
+.dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# VS Code
+.vscode/
+
+# Environments
+env/
+venv/
+ENV/
+venv.bak/
+
+# Logs
+logs/
+*.log
+
+# Output
+dist/
+output/
+
+# Screenshots
+screenshots/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Google service account
+service-account.json
+
+# State files
+resume_state.json
+
+# Docker
+*.pid
+
+# Ignore local bat files
+*.bat
+</file>
+
+<file path="add_hyperlinks_to_existing.py">
+#!/usr/bin/env python3
+"""
+Script to add hyperlinks to an existing LinkedIn jobs Excel file
+"""
+
+import os
+import pandas as pd
+from openpyxl.styles import Font
+import glob
+
+def find_latest_excel_file(output_dir="output"):
+    """Find the most recent Excel file in the output directory"""
+    excel_files = []
+    
+    # Walk through the output directory and find Excel files
+    for root, dirs, files in os.walk(output_dir):
+        for file in files:
+            if file.endswith(".xlsx") and "linkedin_jobs" in file.lower() and not file.endswith("_with_hyperlinks.xlsx"):
+                excel_files.append(os.path.join(root, file))
+    
+    if not excel_files:
+        return None
+    
+    # Sort by modification time (newest first)
+    excel_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+    return excel_files[0]
+
+def add_hyperlinks_to_excel(input_file):
+    """Add hyperlinks to URL columns in an existing Excel file"""
+    if not os.path.exists(input_file):
+        print(f"File not found: {input_file}")
+        return False
+    
+    # Create output filename
+    base, ext = os.path.splitext(input_file)
+    output_file = f"{base}_with_hyperlinks{ext}"
+    
+    print(f"Processing file: {input_file}")
+    print(f"Output will be saved to: {output_file}")
+    
+    # Read the Excel file
+    df = pd.read_excel(input_file)
+    
+    # Create a new Excel writer
+    writer = pd.ExcelWriter(output_file, engine='openpyxl')
+    
+    # Write data to Excel
+    df.to_excel(writer, index=False, sheet_name='LinkedIn Jobs')
+    
+    # Get the worksheet
+    worksheet = writer.sheets['LinkedIn Jobs']
+    
+    # Create hyperlink style
+    hyperlink_font = Font(color="0563C1", underline="single")
+    
+    # Find URL columns
+    url_columns = []
+    for i, col in enumerate(df.columns):
+        if 'url' in col.lower() or 'link' in col.lower():
+            url_columns.append((i, col))
+            print(f"Found URL column: {col} at index {i}")
+    
+    if not url_columns:
+        print("No URL columns found in the file!")
+        return False
+    
+    # Add hyperlinks
+    rows_processed = 0
+    for row_num in range(2, len(df) + 2):  # Excel is 1-indexed with header row
+        for col_idx, col_name in url_columns:
+            # Convert to Excel column reference (A, B, C, etc.)
+            col_letter = chr(65 + col_idx)
+            cell_pos = f"{col_letter}{row_num}"
+            
+            # Get URL value
+            url_value = df.iloc[row_num-2, col_idx]
+            
+            # Only process valid URLs
+            if isinstance(url_value, str) and url_value and (url_value.startswith('http://') or url_value.startswith('https://')):
+                worksheet[cell_pos].hyperlink = url_value
+                worksheet[cell_pos].font = hyperlink_font
+                rows_processed += 1
+    
+    # Save the Excel file
+    writer.close()
+    
+    print(f"Processed {rows_processed} hyperlinks across {len(df)} rows")
+    print(f"Created Excel file with hyperlinks: {os.path.abspath(output_file)}")
+    return True
+
+def main():
+    # Find the latest Excel file
+    latest_file = find_latest_excel_file()
+    
+    if not latest_file:
+        print("No LinkedIn jobs Excel files found in the output directory")
+        
+        # Try to look for a specific file if provided as a fallback
+        test_file = os.path.join("output", "2025-05-05", "linkedin_jobs_05-05-2025_0203_COMPLETE.xlsx")
+        if os.path.exists(test_file):
+            latest_file = test_file
+            print(f"Using fallback file: {latest_file}")
+        else:
+            return False
+    
+    # Add hyperlinks to the file
+    success = add_hyperlinks_to_excel(latest_file)
+    
+    if success:
+        # Show success message with file paths
+        print("\nSuccess! Hyperlinks have been added to the Excel file.")
+        print(f"Original file: {latest_file}")
+        
+        base, ext = os.path.splitext(latest_file)
+        output_file = f"{base}_with_hyperlinks{ext}"
+        print(f"New file with hyperlinks: {output_file}")
+        
+        # Open the file for the user
+        try:
+            print("\nOpening the new file...")
+            os.system(f'start {output_file}')
+        except:
+            print("Could not automatically open the file. Please open it manually.")
+    
+    return success
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="browser_utils.py">
+import time
+from typing import Tuple, Optional
+from playwright.sync_api import Page, BrowserContext, Browser, Playwright
+
+from config import (
+    logger, DEFAULT_TIMEOUT, MAX_RETRIES,
+    BROWSER_OPTIONS, USER_AGENT
+)
+
+class BrowserManager:
+    """Handles browser session management and recovery for headless mode."""
+    
+    def __init__(self, playwright: Playwright):
+        self.playwright = playwright
+        self.browser = None
+        self.context = None
+        self.page = None
+        
+    def connect(self) -> Tuple[Page, BrowserContext, Browser]:
+        """Launch a headless browser and establish connection."""
+        return self.launch_headless_browser()
+    
+    def launch_headless_browser(self) -> Tuple[Page, BrowserContext, Browser]:
+        """Launch a new headless browser instance."""
+        try:
+            # Launch new browser with anti-detection options
+            self.browser = self.playwright.chromium.launch(**BROWSER_OPTIONS)
+            
+            # Create a context with custom user agent
+            self.context = self.browser.new_context(
+                user_agent=USER_AGENT
+            )
+            
+            # Setup browser evasion
+            self._set_evasions(self.context)
+            
+            self.page = self.context.new_page()
+            logger.info("Headless browser launched successfully")
+            return self.page, self.context, self.browser
+        except Exception as e:
+            logger.error(f"Headless browser launch failed: {e}")
+            raise
+            
+    def ensure_alive(self, login_callback, combo_counter=None, revalidate_every=5) -> Tuple[Page, BrowserContext, Browser]:
+        """
+        Ensure browser, context and page are alive.
+        Implements a hierarchical recovery system.
+        """
+        # Check if browser is connected
+        try:
+            if getattr(self.browser, "is_closed", lambda: True)():
+                logger.info("Browser connection lost, reconnecting")
+                return self.reconnect_browser(login_callback)
+        except Exception:
+            logger.warning("Error checking browser connection")
+            
+        # Check if page is closed
+        try:
+            page_is_closed = self.page.is_closed()
+        except Exception:
+            page_is_closed = True
+            
+        # Check if context is valid
+        try:
+            context_is_valid = not getattr(self.context, "is_closed", lambda: True)()
+            if not page_is_closed and context_is_valid:
+                _ = self.context.pages  # Test operation
+            else:
+                context_is_valid = False
+        except Exception:
+            context_is_valid = False
+            
+        # Recovery logic
+        if page_is_closed and context_is_valid:
+            logger.info("Page was closed, creating new page")
+            try:
+                self.page = self.context.new_page()
+            except Exception:
+                context_is_valid = False
+                
+        if not context_is_valid:
+            logger.info("Context invalid, creating new context")
+            try:
+                self._clean_close(self.context)
+                self.context = self.browser.new_context(user_agent=USER_AGENT)
+                self._set_evasions(self.context)
+                self.page = self.context.new_page()
+            except Exception:
+                logger.warning("Context creation failed, resetting browser")
+                return self.reconnect_browser(login_callback)
+                
+        # Revalidate login if needed
+        if combo_counter is not None and combo_counter % revalidate_every == 0:
+            logger.info(f"Session checkpoint at combo #{combo_counter}")
+            try:
+                self.page, self.context = login_callback(self.page, self.context, self.browser)
+            except Exception as e:
+                logger.error(f"Login revalidation failed: {e}")
+                return self.reconnect_browser(login_callback)
+                
+        return self.page, self.context, self.browser
+        
+    def reconnect_browser(self, login_callback) -> Tuple[Page, BrowserContext, Browser]:
+        """Complete browser reconnection with login for headless mode."""
+        try:
+            self._clean_close(self.browser)
+            
+            # Launch a new headless browser
+            self.browser = self.playwright.chromium.launch(**BROWSER_OPTIONS)
+            self.context = self.browser.new_context(user_agent=USER_AGENT)
+            self._set_evasions(self.context)
+            self.page = self.context.new_page()
+            logger.info("Headless browser relaunched")
+            
+            # Perform login
+            self.page, self.context = login_callback(self.page, self.context, self.browser)
+            return self.page, self.context, self.browser
+        except Exception as e:
+            logger.critical(f"Complete browser reconnection failed: {e}")
+            raise
+    
+    def _set_evasions(self, context):
+        """Setup evasions to avoid bot detection."""
+        try:
+            context.add_init_script("""() => {
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => false
+                });
+                
+                // Override permissions
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+                
+                // Pass various bot detection tests
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+            }""")
+        except Exception as e:
+            logger.debug(f"Failed to set evasions: {e}")
+            
+    def _clean_close(self, resource):
+        """Safely close a browser resource."""
+        if resource:
+            try:
+                resource.close()
+            except Exception:
+                pass  # Ignore errors on close
+</file>
+
+<file path="config.py">
+import dotenv
+import os
+import logging
+import structlog
+import sys
+import argparse
+from datetime import datetime
+
+# Always load from the same .env file regardless of working directory
+dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="LinkedIn Job Scraper (Headless)")
+parser.add_argument("--username", type=str, help="LinkedIn username")
+parser.add_argument("--password", type=str, help="LinkedIn password")
+parser.add_argument("--days", type=int, default=1, help="Number of days to filter jobs (default: 1)")
+parser.add_argument("--jobs", type=int, help="Maximum number of jobs to scrape per keyword+location combo")
+parser.add_argument("--workers", type=int, default=1, help="Number of parallel workers (1-5, default: 1)")
+args = parser.parse_args()
+
+# File and folder paths
+LOG_FOLDER = "logs"
+RESUME_FILE = "resume_state.json"
+SCREENSHOT_FOLDER = "screenshots"
+OUTPUT_FOLDER = "output"
+
+# Create necessary folders
+for folder in [LOG_FOLDER, SCREENSHOT_FOLDER, OUTPUT_FOLDER]:
+    os.makedirs(folder, exist_ok=True)
+
+# Logging setup
+log_file = os.path.join(LOG_FOLDER, f"linkedin_scraper_{datetime.now().strftime('%d%m%Y_%H%M%S')}.log")
+
+logging.basicConfig(
+    format="%(message)s",
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler(log_file, mode='w', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+        structlog.dev.set_exc_info,
+        structlog.dev.ConsoleRenderer(colors=True),
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    cache_logger_on_first_use=True,
+)
+
+logger = structlog.get_logger()
+
+# Credentials
+USERNAME = args.username or os.getenv("LINKEDIN_USERNAME")
+PASSWORD = args.password or os.getenv("LINKEDIN_PASSWORD")
+
+# Search parameters
+FILTER_KEYWORDS = [
+    "Python developer", "PHP DEVELOPER", "LARAVEL", "DJANGO", 
+    "qa engineer", "SDET", "node developer", "java developer", 
+    "flutter", "iOS developer", "react", "full stack", 
+    "frontend", "backend"
+]
+LOCATIONS = ["Gurugram", "Bengaluru"]
+
+# Timing settings
+DEFAULT_TIMEOUT = 20000  # 20 seconds
+DEFAULT_WAIT = 5000      # 5 seconds
+SHORT_WAIT = 3000        # 3 seconds
+DEFAULT_TIME_FILTER = 86400 * args.days  # Convert days to seconds
+DEFAULT_JOB_COUNT = args.jobs  # Default to None (unlimited) or command line value
+RESUME_TIMEOUT = 15      # 15 seconds
+MAX_RETRIES = 3          # Max retry attempts
+MAX_WORKERS = args.workers or 1  # Default to 1 worker
+
+# Browser options for avoiding detection
+BROWSER_OPTIONS = {
+    "headless": True,
+    "args": [
+        "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-web-security",
+        "--window-size=1920,1080",
+        "--disable-features=IsolateOrigins,site-per-process",
+    ],
+    "ignore_default_args": ["--enable-automation"],
+}
+
+# User agent for browser context
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+</file>
+
+<file path="Dockerfile">
+FROM python:alpine
+
+# Install system dependencies for Chromium
+RUN apk add --no-cache \
+    wget gnupg curl ca-certificates \
+    ttf-liberation libappindicator alsa-lib \
+    at-spi2-atk cups dbus \
+    gdk-pixbuf nss libx11-dev \
+    libxcomposite libxdamage libxrandr xdg-utils \
+    vulkan-loader
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/.cache/ms-playwright
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# Install Playwright and Chromium
+RUN pip install playwright && playwright install chromium
+
+# Copy project files
+COPY . /app
+WORKDIR /app
+
+# Command to run your scraper
+CMD ["python", "main.py"]
+</file>
+
+<file path="job_details.py">
+import re
+from typing import Dict, Tuple, Optional, Any, List
+from playwright.sync_api import Page, Locator
+
+from config import logger, SHORT_WAIT
+
+class JobDetailsExtractor:
+    """Extract job details from LinkedIn job postings."""
+    
+    # Regex patterns for salary and job info
+    RUPEE_PATTERN = r"(₹[\d,.]+[KlMB]?(?:/yr|/hr|/day|/month)?)(?:\s*-\s*(₹[\d,.]+[KlMB]?(?:/yr|/hr|/day|/month)?))"
+    DOLLAR_PATTERN = r"(\$[\d,]+(?:K|M)?(?:/yr|/hr|/day|/month)?)(?:\s*-\s*(\$[\d,]+(?:K|M)?(?:/yr|/hr|/day|/month)?))"
+    GENERIC_CURRENCY = r"[₹$€£][\d,.]+(K|M|B)?(/\w+)?(\s*-\s*[₹$€£][\d,.]+(K|M|B)?(/\w+)?)"
+    SUSPICIOUS_TERMS = ["premium", "trial", "free", "subscription", "plan"]
+    
+    # Optimized selectors
+    SELECTORS = {
+        "job_title": [
+            ".job-details-jobs-unified-top-card__job-title",
+            "h1.t-24", 
+            "h1.job-title"
+        ],
+        "company_name": [
+            ".job-details-jobs-unified-top-card__company-name",
+            "a.topcard__org-name-link"
+        ],
+        "job_location": [
+            ".job-details-jobs-unified-top-card__primary-description-container",
+            ".job-details-jobs-unified-top-card__bullet",
+            "span.topcard__flavor--bullet"
+        ],
+        "posted_time": [
+            ".job-details-jobs-unified-top-card__primary-description-container strong span",
+            ".posted-time-ago__text",
+            "span.posted-time"
+        ],
+        "company_url": [
+            "div.job-details-jobs-unified-top-card__company-name a",
+            "a.topcard__org-name-link"
+        ],
+        "industry": [
+            "div.t-14.mt5",
+            "span.company-industries"
+        ],
+        "employees": [
+            "section[data-view-name='job-details-about-company-module'] span.jobs-company__inline-information",
+            ".company-employee-count"
+        ],
+        "hiring_manager": [
+            "div.hirer-card__hirer-information a",
+            ".posted-by a"
+        ],
+        "compensation_section": [
+            "section:has-text('Compensation')",
+            "div.jobs-unified-compensation__container",
+            ".salary-range-section"
+        ]
+    }
+    
+    def __init__(self):
+        self.job_details = {}
+        
+    def extract(self, page: Page, location: str = "", keyword: str = "") -> Dict[str, Any]:
+        """Extract all job details from the current job posting page."""
+        # Reset job details
+        self.job_details = {
+            "Job Title": "Not Specified",
+            "Job City": location,
+            "Job Profile": keyword,
+            "Company Name": "Not Specified",
+            "Job Location": "Not Specified",
+            "Workplace Type": "Not Specified",
+            "Job Type": "Not Specified",
+            "Job Budget": "Not Specified",
+            "Posted Time": "Not Specified",
+            "Total Employees": "Not Specified",
+            "Industry": "Not Specified",
+            "Company LinkedIn URL": "",
+            "Job URL": "",
+            "Hiring Manager URL": ""
+        }
+        
+        try:
+            # Wait for critical elements to be loaded
+            self._wait_for_job_page(page)
+            
+            # Extract all details in parallel where possible
+            self._extract_basic_info(page)
+            self._extract_job_card_data(page)
+            self._extract_urls_and_company(page)
+            self._extract_industry_and_employees(page)
+            
+        except Exception as e:
+            logger.error(f"Error extracting job details: {e}")
+            
+        return self.job_details
+    
+    def _wait_for_job_page(self, page: Page) -> None:
+        """Wait for critical job page elements to load before extraction."""
+        try:
+            # Wait for either job title or company name to be visible
+            page.wait_for_selector(",".join(self.SELECTORS["job_title"]) + "," + 
+                                ",".join(self.SELECTORS["company_name"]),
+                                timeout=SHORT_WAIT)
+        except Exception:
+            # Continue even if timeout, we'll handle missing data gracefully
+            pass
+            
+    def _extract_basic_info(self, page: Page) -> None:
+        """Extract basic job info like title, company, location."""
+        # Job title - try multiple selectors
+        self.job_details["Job Title"] = self._get_from_selectors(page, self.SELECTORS["job_title"])
+                
+        # Company name   
+        self.job_details["Company Name"] = self._get_from_selectors(page, self.SELECTORS["company_name"])
+            
+        # Job location
+        raw_location = self._get_from_selectors(page, self.SELECTORS["job_location"])
+        if raw_location:
+            # Clean up location text (split by bullet point if present)
+            cleaned_location = re.split(r"·|\•", raw_location)[0].strip()
+            if cleaned_location:
+                # Get first part if comma-separated
+                self.job_details["Job Location"] = cleaned_location.split(",")[0].strip()
+            
+        # Posted time
+        posted_text = self._get_from_selectors(page, self.SELECTORS["posted_time"])
+        if posted_text:
+            self.job_details["Posted Time"] = posted_text
+            
+    def _get_from_selectors(self, page: Page, selectors: List[str], default: str = "") -> str:
+        """Try multiple selectors and return the first successful result."""
+        for selector in selectors:
+            try:
+                element = page.locator(selector)
+                if element.count() > 0 and element.first.is_visible(timeout=SHORT_WAIT):
+                    content = element.first.text_content(timeout=SHORT_WAIT)
+                    if content:
+                        return content.strip()
+            except Exception:
+                continue
+        return default
+            
+    def _extract_job_card_data(self, page: Page) -> None:
+        """Extract workplace type, job type and salary data."""
+        # Use the dynamic extraction method from the original MVP code
+        workplace_type, job_type, job_budget = self._extract_topcard_job_details(page)
+        
+        if workplace_type:
+            self.job_details["Workplace Type"] = workplace_type
+            
+        if job_type:
+            self.job_details["Job Type"] = job_type
+            
+        if job_budget and self._validate_salary(job_budget):
+            self.job_details["Job Budget"] = job_budget
+                
+    def _extract_topcard_job_details(self, page: Page) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """
+        Dynamically locate the Job Top Card container,
+        and extract Workplace Type, Job Type, and Job Budget (Salary) from inside it.
+        No class name dependencies. Processes all buttons inside container.
+        """
+        workplace_type = None
+        job_type = None
+        job_budget = None
+
+        try:
+            # Step 1: Dynamically find the correct top-card container
+            top_card_container = None
+            divs = page.locator("div")
+            div_count = divs.count()
+
+            for i in range(div_count):
+                div = divs.nth(i)
+
+                try:
+                    # Early skip if div is invisible or too small
+                    bounding_box = div.bounding_box(timeout=2000)
+                    if not bounding_box or bounding_box["height"] < 50 or bounding_box["width"] < 100:
+                        continue
+                        
+                    if not div.is_visible(timeout=2000):
+                        continue
+                        
+                    has_title = div.locator("h1, h2, h3").count() > 0
+                    has_buttons = div.locator("button").count() > 0
+
+                    if has_title and has_buttons:
+                        top_card_container = div
+                        logger.debug(f"Top card container found at div #{i}")
+                        break
+
+                except Exception as e:
+                    logger.debug(f"Div #{i} skipped due to error: {e}")
+
+            if not top_card_container:
+                logger.warning("Top card container not found dynamically.")
+                return workplace_type, job_type, job_budget
+
+            # Step 2: Extract all buttons inside the top card container
+            buttons = top_card_container.locator("button")
+            button_count = buttons.count()
+
+            for i in range(button_count):
+                try:
+                    button = buttons.nth(i)
+
+                    button_text = ""
+
+                    spans = button.locator("span")
+                    span_count = spans.count()
+
+                    if span_count > 0:
+                        parts = []
+                        for j in range(span_count):
+                            try:
+                                part = spans.nth(j).inner_text(timeout=2000).strip()
+                                if part:
+                                    parts.append(part)
+                            except Exception as e:
+                                logger.debug(f"Span #{j} inside button unreadable: {e}")
+                        
+                        button_text = " ".join(parts).strip().lower()
+
+                    else:
+                        try:
+                            button_text = button.inner_text(timeout=3000).strip().lower()
+                        except Exception as e:
+                            logger.debug(f"Button #{i} unreadable directly: {e}")
+                            button_text = ""
+
+                    logger.debug(f"Button {i} full text: {button_text}")
+
+                    # Match Job Budget (salary)
+                    if not job_budget: 
+                        # Check for currency symbols in the text
+                        if any(symbol in button_text for symbol in ["₹", "$", "€", "£"]):
+                            job_budget_text = button.inner_text(timeout=3000).strip()
+                            
+                            # Skip if contains "premium" or suspicious content
+                            if any(term in job_budget_text.lower() for term in self.SUSPICIOUS_TERMS):
+                                logger.debug(f"Skipping likely non-salary text: '{job_budget_text}'")
+                                continue
+                                
+                            # Log the raw text for debugging
+                            logger.debug(f"Found potential salary text: '{job_budget_text}'")
+                            
+                            # For Indian Rupee format like "₹2.5M/yr - ₹2.7M/yr"
+                            rupee_match = re.search(r"(₹[\d,.]+[KlMB]?(?:/yr|/hr|/day|/month)?)(?:\s*-\s*(₹[\d,.]+[KlMB]?(?:/yr|/hr|/day|/month)?))?", job_budget_text)
+                            if rupee_match:
+                                job_budget = rupee_match.group(0)
+                                # Verify it looks like a salary (has digits)
+                                if re.search(r"\d", job_budget):
+                                    logger.debug(f"Indian Rupee salary detected: {job_budget}")
+                                else:
+                                    job_budget = None
+                            
+                            # For dollar format like "$50K/yr - $70K/yr"
+                            dollar_match = re.search(r"(\$[\d,]+(?:K|M)?(?:/yr|/hr|/day|/month)?)(?:\s*-\s*(\$[\d,]+(?:K|M)?(?:/yr|/hr|/day|/month)?))?", job_budget_text)
+                            if dollar_match and not job_budget:
+                                job_budget = dollar_match.group(0)
+                                # Verify it looks like a salary (has digits)
+                                if re.search(r"\d", job_budget):
+                                    logger.debug(f"Dollar salary detected: {job_budget}")
+                                else:
+                                    job_budget = None
+                                
+                            # General currency capture if specific formats fail
+                            if not job_budget:
+                                # Try to match any currency with number
+                                currency_match = re.search(r"[₹$€£][\d,.]+(K|M|B)?(/\w+)?(\s*-\s*[₹$€£][\d,.]+(K|M|B)?(/\w+)?)?", job_budget_text)
+                                if currency_match:
+                                    job_budget = currency_match.group(0)
+                                    # Verify it looks like a salary (has digits)
+                                    if re.search(r"\d", job_budget):
+                                        logger.debug(f"Generic currency match: {job_budget}")
+                                    else:
+                                        job_budget = None
+
+                    # Match Workplace Type
+                    if not workplace_type:
+                        if "on-site" in button_text or "onsite" in button_text:
+                            workplace_type = "On-site"
+                        elif "remote" in button_text:
+                            workplace_type = "Remote"
+                        elif "hybrid" in button_text:
+                            workplace_type = "Hybrid"
+
+                    # Match Job Type using regex
+                    if not job_type:
+                        if re.search(r"\bfull[\s-]?time\b", button_text):
+                            job_type = "Full-time"
+                        elif re.search(r"\bpart[\s-]?time\b", button_text):
+                            job_type = "Part-time"
+                        elif "contract" in button_text:
+                            job_type = "Contract"
+                        elif "internship" in button_text:
+                            job_type = "Internship"
+                        elif "temporary" in button_text:
+                            job_type = "Temporary"
+                        elif "volunteer" in button_text:
+                            job_type = "Volunteer"
+                        elif "other" in button_text:
+                            job_type = "Other"
+
+                    # Early exit if workplace and job type found
+                    if workplace_type and job_type and job_budget:
+                        logger.debug(f"Found all job details. Early exit.")
+                        break
+
+                except Exception as e:
+                    logger.debug(f"Skipped unreadable button #{i}: {e}")
+            
+            # Look for salary in dedicated compensation section
+            if not job_budget:
+                try:
+                    # Look for the section with compensation
+                    compensation_section = page.locator("section:has-text('Compensation'), div.jobs-unified-compensation__container")
+                    
+                    if compensation_section.is_visible(timeout=1000):
+                        comp_text = compensation_section.inner_text(timeout=3000)
+                        
+                        # Skip if contains "premium" or other suspicious content
+                        if any(term in comp_text.lower() for term in self.SUSPICIOUS_TERMS):
+                            logger.debug(f"Skipping likely non-salary section text: '{comp_text}'")
+                        else:
+                            logger.debug(f"Found compensation section: '{comp_text}'")
+                            
+                            # Apply same regex patterns to capture salary information
+                            rupee_match = re.search(r"(₹[\d,.]+[KlMB]?(?:/yr|/hr|/day|/month)?)(?:\s*-\s*(₹[\d,.]+[KlMB]?(?:/yr|/hr|/day|/month)?))?", comp_text)
+                            if rupee_match:
+                                salary_text = rupee_match.group(0)
+                                # Verify it looks like a salary (has digits)
+                                if re.search(r"\d", salary_text):
+                                    job_budget = salary_text
+                                    logger.debug(f"Indian Rupee salary detected from compensation section: {job_budget}")
+                            
+                            # If no rupee match, try dollar match
+                            if not job_budget:
+                                dollar_match = re.search(r"(\$[\d,]+(?:K|M)?(?:/yr|/hr|/day|/month)?)(?:\s*-\s*(\$[\d,]+(?:K|M)?(?:/yr|/hr|/day|/month)?))?", comp_text)
+                                if dollar_match:
+                                    salary_text = dollar_match.group(0)
+                                    # Verify it looks like a salary (has digits)
+                                    if re.search(r"\d", salary_text):
+                                        job_budget = salary_text
+                                        logger.debug(f"Dollar salary detected from compensation section: {job_budget}")
+                except Exception as e:
+                    logger.debug(f"Error looking for compensation section: {e}")
+
+        except Exception as e:
+            logger.warning(f"Top card extraction failed: {e}")
+
+        return workplace_type, job_type, job_budget
+                
+    def _extract_urls_and_company(self, page: Page) -> None:
+        """Extract company and hiring manager URLs."""
+        # Job URL - using original logic from MVP
+        try:
+            job_url = page.locator("h1.t-24 a").first.get_attribute("href")
+            if job_url: 
+                job_url = job_url.split("?")[0]
+                if not job_url.startswith("https://"):
+                    job_url = "https://www.linkedin.com" + job_url
+                self.job_details["Job URL"] = job_url
+        except:
+            # Fallback to current page URL if the above method fails
+            self.job_details["Job URL"] = page.url.split("?")[0]
+                
+        # Company LinkedIn URL    
+        try:
+            company_link_elem = page.locator("div.job-details-jobs-unified-top-card__company-name")
+            company_url = self._extract_href(company_link_elem, "a")
+            if company_url:
+                    self.job_details["Company LinkedIn URL"] = company_url
+        except Exception as e:
+            logger.debug(f"Error extracting company URL: {e}")
+            
+        # Hiring Manager - using original logic from MVP
+        try:
+            hirer_card = page.locator("div.hirer-card__hirer-information")
+            hiring_manager_url = self._extract_href(hirer_card, "a")
+            if hiring_manager_url:
+                self.job_details["Hiring Manager URL"] = hiring_manager_url
+        except Exception as e:
+            logger.debug(f"Error extracting Hiring Manager URL: {e}")
+                
+    def _extract_industry_and_employees(self, page: Page) -> None:
+        """Extract industry and company employee information using original logic."""
+        # Sector / Industry - using original logic from MVP
+        try:
+            industry_text = page.locator('div.t-14.mt5').first.text_content().strip()
+            lines = [line.strip() for line in industry_text.split('\n') if line.strip()]
+            self.job_details["Industry"] = lines[0] if lines else ""
+        except:
+            pass
+            
+        # Total Employees - using original logic from MVP
+        try:
+            employees_text = page.locator("section[data-view-name='job-details-about-company-module'] span.jobs-company__inline-information").first.text_content().strip()
+            employee_range = employees_text.replace("employees", "").strip()
+            
+            if employee_range:
+                employee_range = str(employee_range).strip()
+
+            self.job_details["Total Employees"] = f'="{employee_range}"'
+        except:
+            self.job_details["Total Employees"] = ""
+            
+    def _extract_href(self, locator: Locator, selector: str, default: str = "") -> str:
+        """Extract href attribute from a locator + selector combination."""
+        try:
+            href = locator.locator(selector).get_attribute("href", timeout=SHORT_WAIT)
+            if href:
+                return href if href.startswith("http") else "https://www.linkedin.com" + href
+            return default
+        except:
+            return default
+    
+    def _extract_salary(self, text: str) -> Optional[str]:
+        """Extract salary information from text."""
+        if not text:
+            return None
+            
+        # Skip suspicious content
+        if any(term in text.lower() for term in self.SUSPICIOUS_TERMS):
+            return None
+            
+        # Try rupee pattern
+        rupee_match = re.search(self.RUPEE_PATTERN, text)
+        if rupee_match:
+            return rupee_match.group(0)
+            
+        # Try dollar pattern
+        dollar_match = re.search(self.DOLLAR_PATTERN, text)
+        if dollar_match:
+            return dollar_match.group(0)
+            
+        # Try generic currency pattern
+        currency_match = re.search(self.GENERIC_CURRENCY, text)
+        if currency_match:
+            return currency_match.group(0)
+            
+        return None
+        
+    def _extract_from_compensation(self, page: Page) -> Optional[str]:
+        """Extract salary from dedicated compensation section."""
+        compensation = self._get_from_selectors(page, self.SELECTORS["compensation_section"])
+        if compensation:
+            return self._extract_salary(compensation)
+        return None
+        
+    def _validate_salary(self, salary: str) -> bool:
+        """Validate if a salary string is legitimate."""
+        if not salary:
+            return False
+            
+        # Must contain digits
+        if not re.search(r'\d', salary):
+            return False
+            
+        # Check for suspicious terms
+        if any(term in salary.lower() for term in self.SUSPICIOUS_TERMS):
+            return False
+            
+        # Check for zero values
+        zero_patterns = [r'[\$₹€£]\s*0', r'[\$₹€£]\s*0[./,]0']
+        if any(re.search(pattern, salary) for pattern in zero_patterns):
+            return False
+            
+        return True
+</file>
+
+<file path="job_scraper.py">
+from typing import List, Dict, Any, Optional, Set
+import time
+import re
+from tqdm import tqdm
+from playwright.sync_api import Page, BrowserContext
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import os
+import urllib.parse
+
+from config import logger, DEFAULT_TIMEOUT, DEFAULT_WAIT, SHORT_WAIT
+from job_details import JobDetailsExtractor
+
+# Global list to store all jobs that have been found
+all_jobs = []
+
+class JobScraper:
+    """Handles LinkedIn job scraping functionality."""
+    
+    def __init__(self, page: Page, context: BrowserContext, max_workers: int = 3):
+        self.page = page
+        self.context = context
+        self.job_details_extractor = JobDetailsExtractor()
+        self.max_workers = max_workers
+        self.processed_job_ids = set()  # Track already processed job IDs
+        self._lock = threading.Lock()  # Thread synchronization
+        
+    def scrape_jobs(self, keyword: str, location: str, max_count: Optional[int] = None, time_filter: int = 86400) -> List[Dict[str, Any]]:
+        """
+        Scrape jobs for a given keyword and location combination.
+        
+        Args:
+            keyword: Job search keyword
+            location: Location to search in
+            max_count: Maximum number of jobs to scrape (None for unlimited)
+            time_filter: Time filter in seconds (default: 1 day)
+            
+        Returns:
+            List of job details dictionaries
+        """
+        #logger.info(f"Scraping jobs for '{keyword}' in '{location}'")
+        jobs = []
+        start = 0  # pagination offset, increases by 25 for each page
+        consecutive_empty_pages = 0
+        max_empty_pages = 2
+        
+        with tqdm(total=max_count if max_count else 0, desc=f"Processing '{keyword}'", unit="job") as progress:
+            while True:
+                # Check if we've reached our max job count
+                if max_count is not None and len(jobs) >= max_count:
+                    logger.info(f"Reached max job count: {max_count}")
+                    break
+                
+                # Check if we've seen too many empty pages
+                if consecutive_empty_pages >= max_empty_pages:
+                    logger.info(f"{consecutive_empty_pages} empty pages in a row, moving on")
+                    break
+                
+                # Construct search URL with filters
+                search_url = (
+                    f"https://www.linkedin.com/jobs/search/?keywords={keyword}"
+                    f"&location={location}&start={start}&f_TPR=r{time_filter}&f_WT=1%2C1%2C3"
+                )
+                
+                logger.info(f"Visiting: {search_url}")
+                
+                # Navigate to search results page
+                try:
+                    self.page.goto(search_url, wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+                except Exception as e:
+                    logger.warning(f"Navigation failed: {e}")
+                    consecutive_empty_pages += 1
+                    start += 25
+                    continue
+                
+                # Check for no results message
+                no_results = self._check_no_results()
+                if no_results:
+                    logger.info("No matching jobs found")
+                    break
+                
+                # Check for visible job cards directly before attempting to scroll (if applicable)
+                try:
+                    initial_job_cards = self.page.locator(".job-card-container--clickable")
+                    initial_count = initial_job_cards.count()
+                    if initial_count > 0:
+                        # Reset empty page counter immediately if we see cards
+                        consecutive_empty_pages = 0
+                    else:
+                        logger.warning("No job cards found before scrolling")
+                except Exception as e:
+                    logger.debug(f"Error checking initial cards: {e}")
+                
+                # Scroll to load all job cards
+                if not self._scroll_job_list():
+                    logger.warning("Scrolling failed, skipping page")
+                    consecutive_empty_pages += 1
+                    start += 25
+                    continue
+                
+                # Process job cards
+                try:
+                    job_cards = self.page.locator(".job-card-container--clickable")
+                    total_cards = job_cards.count()
+                    
+                    if total_cards == 0:
+                        logger.warning("No job cards found")
+                        consecutive_empty_pages += 1
+                        start += 25
+                        continue
+                        
+                    # Reset empty page counter if we found cards
+                    consecutive_empty_pages = 0
+                    
+                    # Get job IDs and titles for pre-filtering
+                    job_data = self._collect_job_card_data(job_cards, total_cards)
+                    
+                    # Filter out irrelevant jobs and already processed ones
+                    filtered_jobs = self._filter_job_cards(job_data, keyword)
+                    
+                    if not filtered_jobs:
+                        logger.info(f"No matching jobs found for '{keyword}'")
+                        consecutive_empty_pages += 1
+                        start += 25
+                        continue
+                        
+                    logger.info(f"Found {len(filtered_jobs)} matching jobs")
+                    
+                    # Apply max count limit if needed
+                    if max_count is not None:
+                        remaining = max_count - len(jobs)
+                        if remaining <= 0:
+                            break
+                        if len(filtered_jobs) > remaining:
+                            filtered_jobs = filtered_jobs[:remaining]
+                    
+                    # Check if using batch processing or sequential processing
+                    if self.max_workers > 1 and len(filtered_jobs) > 1:
+                        # Process jobs in parallel using batch processing
+                        batch_jobs = self._process_job_cards_batch(filtered_jobs, keyword, location)
+                        jobs.extend(batch_jobs)
+                        progress.update(len(batch_jobs))
+                    else:
+                        # Process jobs sequentially (original approach)
+                        for i, (index, job_id, title) in enumerate(filtered_jobs):
+                            job = self._process_job_card(job_cards.nth(index), keyword, location, job_id)
+                            if job:
+                                jobs.append(job)
+                                progress.update(1)
+                                
+                            # Check if we've reached the max count
+                            if max_count is not None and len(jobs) >= max_count:
+                                logger.info(f"Reached max job count: {max_count}")
+                                return jobs
+                            
+                except Exception as e:
+                    logger.error(f"Error processing job cards: {e}")
+                    
+                # Move to next page
+                start += 25
+                
+        return jobs
+    
+    def _collect_job_card_data(self, job_cards, total_cards) -> List[tuple]:
+        """Collect job ID and title data from each card for pre-filtering."""
+        job_data = []
+        
+        for i in range(total_cards):
+            try:
+                card = job_cards.nth(i)
+                
+                # Skip if not visible
+                if not card.is_visible(timeout=SHORT_WAIT):
+                    continue
+                    
+                # Extract job ID
+                job_id = None
+                try:
+                    job_id = card.get_attribute("data-job-id")
+                    if not job_id:
+                        # Try alternative methods to get ID
+                        job_id = card.get_attribute("id")
+                        if job_id and job_id.startswith("job-card-"):
+                            job_id = job_id.replace("job-card-", "")
+                except:
+                    pass
+                
+                # Extract title text
+                card_text = card.inner_text(timeout=SHORT_WAIT)
+                if not card_text:
+                    continue
+                    
+                job_title_lines = card_text.strip().split("\n")
+                job_title = re.sub(r"\s+", " ", job_title_lines[0]).strip().lower()
+                
+                # Add to job data collection
+                job_data.append((i, job_id, job_title))
+                
+            except Exception as e:
+                logger.debug(f"Error collecting job card data: {e}")
+                
+        return job_data
+    
+    def _filter_job_cards(self, job_data: List[tuple], keyword: str) -> List[tuple]:
+        """Filter job cards based on keyword match and duplicate tracking."""
+        filtered_jobs = []
+        skipped_duplicates = 0
+        mismatched_jobs = 0
+        
+        # Normalize and prepare the keyword for matching
+        keyword_lower = keyword.lower()
+        # Split into words and ignore common conjunctions/prepositions
+        stop_words = {'and', 'or', 'the', 'in', 'for', 'of', 'with', 'a', 'an', 'to', 'at', 'by', 'on'}
+        keyword_words = [w for w in re.split(r'[^\w]+', keyword_lower) 
+                         if w and w not in stop_words]
+        
+        # Get the first significant word of the keyword (critical to match)
+        first_word = keyword_words[0] if keyword_words else None
+        
+        logger.debug(f"Keyword '{keyword}' parsed into words: {keyword_words}")
+        logger.debug(f"First critical word (must match): '{first_word}'")
+        
+        for index, job_id, job_title in job_data:
+            # Skip previously processed jobs
+            if job_id and job_id in self.processed_job_ids:
+                logger.debug(f"Skipping already processed job: {job_title}")
+                skipped_duplicates += 1
+                continue
+            
+            job_title_lower = job_title.lower()
+            
+            # Clean up the job title for matching - replace punctuation with spaces
+            cleaned_title = re.sub(r'[^\w\s]', ' ', job_title_lower)
+            title_words = set(w for w in cleaned_title.split() if w and w not in stop_words)
+            
+            # RULE 1: First word of keyword MUST be in the title words
+            if first_word and first_word not in title_words:
+                mismatched_jobs += 1
+                logger.debug(f"Job title did not match first word rule: '{job_title}' - missing '{first_word}'")
+                continue
+            
+            # Count how many of the keyword words are in the title words
+            matching_words = sum(1 for word in keyword_words if word in title_words)
+            
+            # RULE 2: Require at least 75% of the significant words to match
+            min_match_percentage = 0.75
+            required_matches = max(1, round(len(keyword_words) * min_match_percentage))
+            
+            if matching_words >= required_matches:
+                filtered_jobs.append((index, job_id, job_title))
+                # Log which words matched for debugging
+                matched = [word for word in keyword_words if word in title_words]
+                logger.debug(f"Matched job: '{job_title}' with keyword '{keyword}' (Matched {matching_words}/{len(keyword_words)} words: {matched})")
+                
+                # Add to processed set if we have an ID
+                if job_id:
+                    with self._lock:
+                        self.processed_job_ids.add(job_id)
+            else:
+                mismatched_jobs += 1
+                logger.debug(f"Job title did not match word threshold: '{job_title}' with keyword '{keyword}' (Matched only {matching_words}/{len(keyword_words)} words: {[word for word in keyword_words if word in title_words]})")
+        
+        if skipped_duplicates > 0:
+            logger.info(f"Skipped {skipped_duplicates} duplicate jobs using job IDs")
+            
+        if mismatched_jobs > 0:
+            logger.debug(f"Filtered out {mismatched_jobs} jobs that didn't match keyword '{keyword}'")
+            
+        return filtered_jobs
+    
+    def _process_job_cards_batch(self, filtered_jobs: List[tuple], keyword: str, location: str) -> List[Dict[str, Any]]:
+        """Process multiple job cards in parallel using thread pool."""
+        # Create additional pages for parallel processing
+        batch_size = min(len(filtered_jobs), self.max_workers)
+        logger.info(f"Processing {len(filtered_jobs)} jobs in batches using {batch_size} workers")
+        
+        # Create additional browser contexts for parallel processing
+        contexts_and_pages = [(self.context, self.page)]  # Start with the main context and page
+        
+        for _ in range(1, batch_size):
+            try:
+                # Create new context and page
+                context = self.context.browser.new_context()
+                page = context.new_page()
+                contexts_and_pages.append((context, page))
+            except Exception as e:
+                logger.warning(f"Error creating additional browser context: {e}")
+                break
+        
+        batch_jobs = []
+        
+        with ThreadPoolExecutor(max_workers=len(contexts_and_pages)) as executor:
+            # Divide jobs among workers
+            futures = []
+            
+            for i, (index, job_id, job_title) in enumerate(filtered_jobs):
+                # Choose which context/page to use (round-robin)
+                context, page = contexts_and_pages[i % len(contexts_and_pages)]
+                
+                # Submit job to thread pool
+                if i < len(contexts_and_pages):
+                    # First batch: submit immediately
+                    future = executor.submit(
+                        self._process_job_in_new_tab, 
+                        page, context, job_id, job_title, keyword, location
+                    )
+                    futures.append(future)
+                else:
+                    # Wait for any future to complete before submitting more
+                    # This keeps the number of simultaneous jobs limited
+                    done, futures = self._wait_for_any_future(futures)
+                    for f in done:
+                        result = f.result()
+                        if result:
+                            batch_jobs.append(result)
+                    
+                    # Submit new job
+                    future = executor.submit(
+                        self._process_job_in_new_tab, 
+                        page, context, job_id, job_title, keyword, location
+                    )
+                    futures.append(future)
+            
+            # Wait for remaining futures to complete
+            for future in futures:
+                try:
+                    result = future.result()
+                    if result:
+                        batch_jobs.append(result)
+                except Exception as e:
+                    logger.error(f"Error in job processing future: {e}")
+        
+        # Close additional contexts (but not the main one)
+        for context, _ in contexts_and_pages[1:]:
+            try:
+                context.close()
+            except:
+                pass
+                
+        return batch_jobs
+    
+    def _wait_for_any_future(self, futures):
+        """Wait for any future to complete and return results."""
+        import concurrent.futures
+        done, not_done = concurrent.futures.wait(
+            futures, 
+            return_when=concurrent.futures.FIRST_COMPLETED
+        )
+        return done, list(not_done)
+    
+    def _process_job_in_new_tab(self, page: Page, context: BrowserContext, 
+                               job_id: str, job_title: str, 
+                               keyword: str, location: str) -> Optional[Dict[str, Any]]:
+        """Process a job in a separate page/tab."""
+        try:
+            # Construct direct job URL if we have the ID
+            if job_id:
+                job_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+                try:
+                    # Navigate to job page
+                    page.goto(job_url, wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+                    page.wait_for_timeout(SHORT_WAIT)
+                    
+                    # Extract job details
+                    extractor = JobDetailsExtractor()  # Create new extractor for thread safety
+                    job = extractor.extract(page, location, keyword)
+                    
+                    # Make sure job URL is correct
+                    job["Job URL"] = job_url
+                    
+                    # Add this job to all_jobs list immediately
+                    global all_jobs
+                    with self._lock:
+                        all_jobs.append(job)
+                    
+                    logger.info(f"Batch extracted job: {job['Job Title']} at {job['Company Name']}")
+                    return job
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing job {job_id} in new tab: {e}")
+                    return None
+            else:
+                logger.debug(f"Cannot process job in new tab - no job ID available for: {job_title}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in job tab processing: {e}")
+            return None
+    
+    def _check_no_results(self) -> bool:
+        """Check if the page shows a 'no results' message."""
+        try:
+            body_text = self.page.inner_text("body", timeout=SHORT_WAIT).lower()
+            no_results_phrases = [
+                "no matching jobs found", 
+                "try different filters", 
+                "search again",
+                "couldn't find any jobs",
+                "no jobs to show",
+                "no results found"
+            ]
+            
+            for phrase in no_results_phrases:
+                if phrase in body_text:
+                    return True
+                    
+            return False
+        except Exception:
+            return False
+    
+    def _scroll_job_list(self, min_cards: int = 25, max_scrolls: int = 15, delay: int = 1) -> bool:
+        """Scroll the job list panel to load more jobs."""
+        try:
+            # Take a screenshot for debugging
+            try:
+                if not os.path.exists("screenshots"):
+                    os.makedirs("screenshots")
+                screenshot_path = os.path.join("screenshots", f"scroll_debug_{int(time.time())}.png")
+                self.page.screenshot(path=screenshot_path)
+                logger.debug(f"Saved debug screenshot to {screenshot_path}")
+            except Exception as e:
+                logger.debug(f"Failed to save debug screenshot: {e}")
+                
+            # Check if we're on the job search page
+            current_url = self.page.url
+            logger.debug(f"Current URL before scrolling: {current_url}")
+            
+            # Try a basic visibility check for the jobs list
+            try:
+                job_cards = self.page.locator(".job-card-container--clickable")
+                initial_count = job_cards.count()
+                logger.info(f"Initial job cards count: {initial_count}")
+            except Exception as e:
+                logger.warning(f"Error checking job card visibility: {e}")
+            
+            # Use dynamic detection to find the scrollable container - silently
+            scroll_selector = self.page.evaluate("""
+                () => {
+                    // First priority: Any div containing job cards with overflow
+                    const all = Array.from(document.querySelectorAll("div"));
+                    for (let el of all) {
+                        if (el.scrollHeight > el.clientHeight && el.querySelector('.job-card-container--clickable')) {
+                            const cls = el.getAttribute("class");
+                            if (cls) {
+                                const firstClass = cls.split(" ")[0].replace(/[^a-zA-Z0-9_-]/g, "");
+                                return `div[class*="${firstClass}"]`;
+                            }
+                        }
+                    }
+                    
+                    // Second priority: Any scrollable parent of job cards
+                    const jobCards = document.querySelector('.job-card-container--clickable');
+                    if (jobCards) {
+                        let parent = jobCards.parentElement;
+                        while (parent && parent.tagName !== 'BODY') {
+                            const style = window.getComputedStyle(parent);
+                            if (style.overflow === 'auto' || style.overflow === 'scroll' || 
+                                style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                                const cls = parent.getAttribute("class");
+                                if (cls) {
+                                    return parent.tagName.toLowerCase() + '.' + cls.split(' ')[0];
+                                } else {
+                                    return parent.tagName.toLowerCase();
+                                }
+                            }
+                            parent = parent.parentElement;
+                        }
+                    }
+                    
+                    // Last resort: Use body as scroller
+                    return 'body';
+                }
+            """)
+            
+            if not scroll_selector:
+                scroll_selector = "body"  # Fallback to body
+                
+            last_card_count = -1
+            stagnant_scrolls = 0
+            max_stagnant_scrolls = 2
+            
+            # Continue scrolling until we've scrolled max_scrolls times
+            # or the card count stops increasing for max_stagnant_scrolls attempts
+            for i in range(max_scrolls):
+                # Perform smooth scroll in smaller steps
+                for _ in range(5):
+                    self.page.evaluate("""
+                        (selector) => {
+                            const el = document.querySelector(selector);
+                            if (el) {
+                                if (el === document.body) {
+                                    window.scrollBy(0, 300); 
+                                } else {
+                                    el.scrollBy(0, 300);
+                                }
+                            }
+                        }
+                    """, scroll_selector)
+                    self.page.wait_for_timeout(200)
+                    
+                self.page.wait_for_timeout(delay * 1000)
+                
+                # Check job cards count
+                job_cards = self.page.locator(".job-card-container--clickable")
+                total_cards = job_cards.count()
+                
+                # We can stop early if we've reached the minimum desired card count
+                # but we'll continue scrolling to try to load as many as possible
+                if total_cards >= min_cards and stagnant_scrolls >= max_stagnant_scrolls:
+                    break
+                    
+                # Check if we're still loading new cards
+                if total_cards == last_card_count:
+                    stagnant_scrolls += 1
+                    if stagnant_scrolls >= max_stagnant_scrolls:
+                        # No new cards after multiple scrolls, probably reached the end
+                        break
+                else:
+                    stagnant_scrolls = 0
+                    last_card_count = total_cards
+                    
+            # Final check for job cards
+            job_cards = self.page.locator(".job-card-container--clickable")
+            final_count = job_cards.count()
+            
+            if final_count > 0:
+                logger.info(f"Finished scrolling. Found total {final_count} job cards")
+                return True
+            else:
+                logger.warning("No job cards found after scrolling")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"Error scrolling job list: {e}")
+            return False
+    
+    def _process_job_card(self, card, keyword: str, location: str, job_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Process a single job card."""
+        try:
+            if not card.is_visible(timeout=SHORT_WAIT):
+                logger.debug("Card not visible, skipping")
+                return None
+                
+            # Get job title from card
+            try:
+                card_text = card.inner_text(timeout=SHORT_WAIT)
+                if not card_text:
+                    logger.debug("Card has no text, skipping")
+                    return None
+                    
+                job_title_lines = card_text.strip().split("\n")
+                job_title = re.sub(r"\s+", " ", job_title_lines[0]).strip().lower()
+                
+                # We already checked keyword match during filtering, no need to check again
+                #logger.info(f"Clicking job card: '{job_title}'")
+                
+                # Click the card to open job details
+                card.click()
+                self.page.wait_for_timeout(SHORT_WAIT)
+                
+                # Extract job details
+                job = self.job_details_extractor.extract(self.page, location, keyword)
+                
+                # Track this job as processed if we have an ID
+                if job_id:
+                    with self._lock:
+                        self.processed_job_ids.add(job_id)
+                        
+                # Add this job to all_jobs list immediately
+                global all_jobs
+                with self._lock:
+                    all_jobs.append(job)
+                        
+                logger.info(f"Extracted job: {job['Job Title']} at {job['Company Name']}")
+                return job
+                
+            except Exception as e:
+                logger.warning(f"Error extracting card text: {e}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"Error processing job card: {e}")
+            return None
+            
+    def test_keyword_matching(self, keyword: str, job_titles: List[str]) -> Dict[str, bool]:
+        """
+        Test keyword matching against a list of job titles without scraping.
+        Useful for debugging and validating matching logic.
+        
+        Args:
+            keyword: The keyword to test
+            job_titles: A list of job titles to test against
+            
+        Returns:
+            A dictionary mapping job titles to match results (True/False)
+        """
+        # Create mock job data with dummy IDs
+        job_data = [(i, f"dummy_id_{i}", title) for i, title in enumerate(job_titles)]
+        
+        # Use the filter method with debug logging enabled
+        import logging
+        original_level = logger.level
+        logger.setLevel(logging.INFO)  # Ensure debug logs are visible
+        
+        # Get the filtered jobs
+        filtered_jobs = self._filter_job_cards(job_data, keyword)
+        
+        # Reset logger level
+        logger.setLevel(original_level)
+        
+        # Create result dictionary
+        matched_indices = {index for index, _, _ in filtered_jobs}
+        results = {title: i in matched_indices for i, title in enumerate(job_titles)}
+        
+        # Print summary
+        matched = [title for title, matched in results.items() if matched]
+        not_matched = [title for title, matched in results.items() if not matched]
+        
+        logger.info(f"\n{'='*50}")
+        logger.info(f"KEYWORD MATCH TEST: '{keyword}'")
+        logger.info(f"{'='*50}")
+        logger.info(f"Total job titles: {len(job_titles)}")
+        logger.info(f"Matched: {len(matched)} ({len(matched)/len(job_titles)*100:.1f}%)")
+        logger.info(f"Not matched: {len(not_matched)} ({len(not_matched)/len(job_titles)*100:.1f}%)")
+        
+        if matched:
+            logger.info(f"\nMATCHED TITLES:")
+            for i, title in enumerate(matched, 1):
+                logger.info(f"  {i}. {title}")
+                
+        if not_matched:
+            logger.info(f"\nNOT MATCHED TITLES:")
+            for i, title in enumerate(not_matched, 1):
+                logger.info(f"  {i}. {title}")
+                
+        logger.info(f"{'='*50}\n")
+        
+        return results
+</file>
+
+<file path="linkedin_auth.py">
+import os
+import time
+from typing import Tuple
+from datetime import datetime
+from playwright.sync_api import Page, BrowserContext
+from config import (
+    logger, USERNAME, PASSWORD, SCREENSHOT_FOLDER, 
+    DEFAULT_TIMEOUT, DEFAULT_WAIT, SHORT_WAIT,
+    USER_AGENT
+)
+
+class LinkedInAuth:
+    """Handles LinkedIn authentication and session management."""
+    
+    # Login detection
+    FEED_INDICATORS = [
+        ".global-nav__me-photo",  # Profile photo
+        ".feed-identity-module",   # Feed identity module
+        ".feed-shared-update-v2",  # Feed posts
+        ".share-box-feed-entry"    # Post creation box
+    ]
+    
+    LOGIN_INDICATORS = [
+        "Sign in", "Forgot password", "Welcome back", 
+        "Email or Phone", "Password"
+    ]
+    
+    SECURITY_CHALLENGE_INDICATORS = [
+        "checkpoint", "challenge", "unusual", "verify", "captcha", "security"
+    ]
+    
+    def __init__(self, username=None, password=None):
+        self.username = username or USERNAME
+        self.password = password or PASSWORD
+        
+        if not self.username or not self.password:
+            raise ValueError("LinkedIn credentials missing. Set LINKEDIN_USERNAME and LINKEDIN_PASSWORD env vars.")
+        
+        # Ensure screenshot folder exists
+        os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
+    
+    def login(self, page: Page, context: BrowserContext, browser) -> Tuple[Page, BrowserContext]:
+        """Main authentication flow."""
+        logger.info("Checking LinkedIn login status")
+        max_attempts = 3
+        
+        for attempt in range(max_attempts):
+            try:
+                logger.info(f"LinkedIn login attempt {attempt+1}/{max_attempts}")
+                
+                # Go directly to login page for more reliability in headless mode
+                page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+                page.wait_for_timeout(DEFAULT_WAIT)
+                
+                # Set evasions
+                self._set_evasions(page)
+                
+                # Take screenshot for debugging
+                self._take_screenshot(page, f"login_before_{attempt+1}")
+                
+                # Check if already logged in by looking at URL
+                if "linkedin.com/feed" in page.url:
+                    logger.info("Already on feed URL, checking login status...")
+                    # Give elements time to load if we're already on feed page
+                    page.wait_for_timeout(3000)
+                    if self._check_logged_in(page):
+                        logger.info("✅ Already logged in to LinkedIn!")
+                        return page, context
+                    else:
+                        logger.info("On feed URL but not fully logged in yet, waiting...")
+                        # Wait a bit longer for elements to load 
+                        page.wait_for_timeout(5000)
+                        if self._check_logged_in(page):
+                            logger.info("✅ Successfully logged in to LinkedIn after waiting!")
+                            return page, context
+                
+                # If on login page, perform login
+                if self._is_on_login_page(page):
+                    logger.info("🔑 Login form detected, filling credentials...")
+                    self._perform_login(page)
+                    
+                    # Take screenshot after login attempt
+                    self._take_screenshot(page, f"login_after_{attempt+1}")
+                    
+                    # Check for security challenges
+                    if self._is_security_challenge(page):
+                        error_msg = "LinkedIn security challenge detected!"
+                        logger.error(f"🚨 {error_msg} Cannot proceed in headless mode.")
+                        self._take_screenshot(page, "security_challenge")
+                        raise Exception(f"{error_msg} Try running in headed mode.")
+                    
+                    # Check if we've been redirected to feed URL, even if elements aren't loaded yet
+                    if "linkedin.com/feed" in page.url:
+                        logger.info("Redirected to feed URL after login, waiting for elements...")
+                        # Extended wait for feed elements to load
+                        page.wait_for_timeout(5000)
+                    
+                    # Check if login successful
+                    if self._check_logged_in(page):
+                        logger.info("✅ Successfully logged in to LinkedIn!")
+                        return page, context
+                    
+                    # One more check with feed URL (URL might be correct but elements not loaded)
+                    if "linkedin.com/feed" in page.url:
+                        logger.info("On feed URL but login check failed, trying again after a longer wait...")
+                        page.wait_for_timeout(8000)  # Extended wait
+                        if self._check_logged_in(page):
+                            logger.info("✅ Successfully logged in to LinkedIn after extended wait!")
+                            return page, context
+                        else:
+                            logger.warning(f"⚠️ On feed URL but login elements not detected after extended wait")
+                    else:
+                        logger.warning(f"⚠️ Login attempt {attempt+1} failed, current URL: {page.url}")
+                else:
+                    # If not on login page but also not logged in, try direct navigation to feed
+                    logger.info("Not on login page, trying to navigate to feed")
+                    page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+                    
+                    # Extended wait for feed to load
+                    page.wait_for_timeout(5000)
+                    
+                    if self._check_logged_in(page):
+                        logger.info("✅ Successfully logged in to LinkedIn!")
+                        return page, context
+            
+                # Wait before retry
+                page.wait_for_timeout(3000)
+                
+            except Exception as e:
+                logger.error(f"❌ Login error on attempt {attempt+1}: {e}")
+                
+                # Try with a new context for the next attempt
+                if attempt < max_attempts - 1:
+                    try:
+                        context.close()
+                    except:
+                        pass
+                        
+                    context = browser.new_context(user_agent=USER_AGENT)
+                    page = context.new_page()
+                    self._set_evasions(page)
+        
+        # If all attempts failed
+        logger.error("❌ All login attempts failed! Could not log in to LinkedIn.")
+        raise Exception("Failed to log in to LinkedIn after multiple attempts")
+            
+    def _check_logged_in(self, page: Page) -> bool:
+        """Check if user is logged in by looking for feed indicators."""
+        # Check URL first - most reliable indicator
+        try:
+            if "linkedin.com/feed" in page.url:
+                logger.info("Feed URL detected")
+                
+                # Check for essential elements that indicate logged-in state
+                essential_selectors = [
+                    ".global-nav__me-photo",        # Profile photo (most reliable)
+                    "nav.global-nav",               # Global navigation bar
+                    ".feed-identity-module",        # Feed identity module
+                    "[data-control-name='identity_welcome_message']", # Welcome message
+                    ".search-global-typeahead__input" # Search box
+                ]
+                
+                # Try several selectors, return true if any are visible
+                for selector in essential_selectors:
+                    try:
+                        if page.locator(selector).is_visible(timeout=SHORT_WAIT):
+                            logger.info(f"Detected logged in state via {selector}")
+                            return True
+                    except:
+                        continue
+                        
+                # If none of the above are visible, check page content
+                try:
+                    page_text = page.inner_text("body", timeout=SHORT_WAIT).lower()
+                    feed_keywords = [
+                        "my network", "jobs", "messaging", "notifications", 
+                        "profile", "post", "share", "your feed"
+                    ]
+                    
+                    matching_keywords = [kw for kw in feed_keywords if kw in page_text]
+                    if matching_keywords:
+                        logger.info(f"Detected logged in state via text: {', '.join(matching_keywords)}")
+                        return True
+                except:
+                    pass
+                    
+                # As a last resort, check if there's a logout button
+                try:
+                    # Check if we can find the sign out option in the menu
+                    if page.locator("button:has-text('Sign out'), a:has-text('Sign out')").count() > 0:
+                        logger.info("Detected logged in state via sign out button existence")
+                        return True
+                except:
+                    pass
+        except Exception as e:
+            logger.debug(f"Error checking login status via URL: {e}")
+        
+        # If we're not on feed URL, do additional checks
+        try:
+            # Check for profile photo - reliable indicator
+            if page.locator(".global-nav__me-photo").is_visible(timeout=SHORT_WAIT):
+                logger.info("Detected logged in state via profile photo")
+                return True
+                
+            # Check for global navigation
+            if page.locator("nav.global-nav").is_visible(timeout=SHORT_WAIT):
+                logger.info("Detected logged in state via navigation menu")
+                return True
+                
+            # Check if we're on any LinkedIn page with profile elements
+            current_url = page.url
+            if "linkedin.com" in current_url and "login" not in current_url and "signup" not in current_url:
+                # Try to check if there are profile elements
+                try:
+                    profile_indicators = [
+                        ".profile-rail-card",
+                        ".identity-headline",
+                        ".pv-top-card"
+                    ]
+                    
+                    for indicator in profile_indicators:
+                        if page.locator(indicator).count() > 0:
+                            logger.info(f"Detected logged in state via profile element: {indicator}")
+                            return True
+                except:
+                    pass
+                    
+                # Look for header or menu elements that only appear when logged in
+                header_indicators = [
+                    "header.global-nav__responsive-header",
+                    ".global-nav__primary-items"
+                ]
+                
+                for indicator in header_indicators:
+                    if page.locator(indicator).count() > 0:
+                        logger.info(f"Detected logged in state via header element: {indicator}")
+                        return True
+        except Exception as e:
+            logger.debug(f"Error in secondary login checks: {e}")
+            
+        return False
+    
+    def _is_on_login_page(self, page: Page) -> bool:
+        """Check if current page is the login page."""
+        try:
+            # Check URL first
+            if "linkedin.com/login" in page.url or "checkpoint" in page.url:
+                return True
+                
+            # Check for login form elements
+            username_field = page.locator("input#username, input[name='session_key']")
+            password_field = page.locator("input#password, input[name='session_password']")
+            
+            if username_field.is_visible(timeout=SHORT_WAIT) and password_field.is_visible(timeout=SHORT_WAIT):
+                return True
+                
+            # Check page text for login indicators
+            page_text = page.inner_text("body", timeout=SHORT_WAIT).lower()
+            return any(indicator.lower() in page_text for indicator in self.LOGIN_INDICATORS)
+        except Exception as e:
+            logger.debug(f"Error checking if on login page: {e}")
+            return False
+    
+    def _is_security_challenge(self, page: Page) -> bool:
+        """Check if LinkedIn is showing a security challenge."""
+        try:
+            # Check URL for challenge indicators
+            current_url = page.url.lower()
+            if any(indicator in current_url for indicator in ["checkpoint", "challenge"]):
+                return True
+                
+            # Check page content for security challenge text
+            page_text = page.inner_text("body", timeout=SHORT_WAIT).lower()
+            security_phrases = [
+                "unusual login", "verify it's you", "security verification",
+                "verify your identity", "confirm your identity", "recognize your device",
+                "unusual activity", "captcha", "complete a security check"
+            ]
+            
+            if any(phrase in page_text for phrase in security_phrases):
+                return True
+                
+            # Check for specific security challenge elements
+            challenge_selectors = [
+                "input#captcha-internal", 
+                ".challenge-dialog",
+                "form.two-step-challenge"
+            ]
+            
+            for selector in challenge_selectors:
+                if page.locator(selector).count() > 0:
+                    return True
+                    
+            return False
+            
+        except Exception as e:
+            logger.debug(f"Error checking for security challenge: {e}")
+            return False
+    
+    def _perform_login(self, page: Page) -> None:
+        """Fill login form and submit."""
+        try:
+            # Find username field with multiple selectors
+            username_selectors = ["#username", "input[name='session_key']", "input[autocomplete='username']"]
+            username_field = None
+            
+            for selector in username_selectors:
+                try:
+                    if page.locator(selector).is_visible(timeout=SHORT_WAIT):
+                        username_field = page.locator(selector)
+                        break
+                except:
+                    continue
+            
+            # Find password field with multiple selectors
+            password_selectors = ["#password", "input[name='session_password']", "input[type='password']"]
+            password_field = None
+            
+            for selector in password_selectors:
+                try:
+                    if page.locator(selector).is_visible(timeout=SHORT_WAIT):
+                        password_field = page.locator(selector)
+                        break
+                except:
+                    continue
+            
+            if not username_field or not password_field:
+                logger.warning("Could not find username or password fields")
+                return
+                
+            # Clear fields first to avoid issues with autofill
+            username_field.fill("")
+            password_field.fill("")
+            
+            # Type credentials with small delay to seem more human-like
+            username_field.type(self.username, delay=100)
+            page.wait_for_timeout(1000)
+            password_field.type(self.password, delay=100)
+            
+            # Click sign-in button
+            signin_button = page.locator("button[type='submit']")
+            if signin_button.is_visible(timeout=SHORT_WAIT):
+                logger.info("Clicking sign-in button...")
+                signin_button.click()
+                
+                # Instead of waiting for navigation, wait for a fixed time
+                # and then check if we're on the feed page
+                logger.info("Waiting for login to complete...")
+                page.wait_for_timeout(5000)  # Wait 5 seconds
+                
+                # Check if URL indicates we've been redirected to feed
+                if "linkedin.com/feed" in page.url:
+                    logger.info(f"After login, URL is now: {page.url}")
+                    # Additional wait for feed elements to load
+                    page.wait_for_timeout(2000)
+                    return
+                
+                # If not on feed yet, wait a bit longer
+                if not "linkedin.com/feed" in page.url:
+                    logger.info("Not on feed yet, waiting longer...")
+                    page.wait_for_timeout(5000)  # Wait another 5 seconds
+            else:
+                logger.warning("Sign-in button not found")
+                
+        except Exception as e:
+            logger.warning(f"Login attempt error: {e}")
+    
+    def _take_screenshot(self, page: Page, name: str) -> None:
+        """Take a screenshot for debugging purposes."""
+        try:
+            screenshot_path = os.path.join(SCREENSHOT_FOLDER, f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            page.screenshot(path=screenshot_path)
+            logger.debug(f"Screenshot saved to {screenshot_path}")
+        except Exception as e:
+            logger.warning(f"Failed to take screenshot: {e}")
+    
+    def _set_evasions(self, page: Page) -> None:
+        """Setup evasions to avoid bot detection."""
+        try:
+            # Set navigator properties to avoid detection
+            page.evaluate("""() => {
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => false
+                });
+                
+                // Override permissions
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+                
+                // Pass various bot detection tests
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+            }""")
+        except Exception as e:
+            logger.debug(f"Failed to set evasions: {e}")
+            
+    def _try_with_fresh_context(self, browser) -> Tuple[Page, BrowserContext]:
+        """Create a fresh context and attempt login again."""
+        logger.info("Trying with fresh context")
+        try:
+            context = browser.new_context(user_agent=USER_AGENT)
+            page = context.new_page()
+            self._set_evasions(page)
+            
+            # Go directly to login page
+            page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+            
+            # If already on feed page
+            if "linkedin.com/feed" in page.url and self._check_logged_in(page):
+                return page, context
+                
+            # Try login if needed
+            if self._is_on_login_page(page):
+                self._perform_login(page)
+                
+                # Check login result
+                if self._check_logged_in(page):
+                    return page, context
+            
+            # If we reach here, all login attempts failed
+            logger.error("All login attempts failed")
+            raise Exception("Failed to log in to LinkedIn after multiple attempts")
+            
+        except Exception as e:
+            logger.error(f"Fresh context login failed: {e}")
+            raise
+</file>
+
+<file path="main.py">
+#!/usr/bin/env python3
+"""
+LinkedIn Job Scraper (Headless)
+A modular tool to scrape job listings from LinkedIn based on keywords and locations.
+"""
+
+import time
+import sys
+from typing import List, Dict, Any, Optional, Tuple
+from playwright.sync_api import sync_playwright
+
+from config import (
+    logger, USERNAME, PASSWORD, FILTER_KEYWORDS, 
+    LOCATIONS, DEFAULT_TIME_FILTER, MAX_RETRIES,
+    DEFAULT_JOB_COUNT, MAX_WORKERS
+)
+from browser_utils import BrowserManager
+from linkedin_auth import LinkedInAuth
+from job_scraper import JobScraper, all_jobs
+from state_manager import StateManager
+from upload_to_drive import upload_to_drive
+
+def scrape_all_keywords(
+    job_scraper: JobScraper,
+    keywords: List[str], 
+    locations: List[str],
+    resume_state: Optional[Dict[str, Any]],
+    time_filter: int,
+    job_count: Optional[int],
+    state_manager: StateManager
+) -> List[Dict[str, Any]]:
+    """
+    Scrape jobs for all keyword-location combinations.
+    
+    Args:
+        job_scraper: JobScraper instance
+        keywords: List of keywords to search for
+        locations: List of locations to search in
+        resume_state: Resume state dictionary or None
+        time_filter: Time filter in seconds
+        job_count: Maximum number of jobs to scrape per combination
+        state_manager: StateManager instance for tracking progress
+        
+    Returns:
+        List of all scraped jobs
+    """
+    combo_counter = 0
+    resumed = False
+    
+    try:
+        # Process each keyword-location combination
+        for keyword in keywords:
+            for location in locations:
+                combo_counter += 1
+                
+                # Handle resume logic
+                if resume_state and not resumed:
+                    if combo_counter < resume_state["combo_counter"]:
+                        logger.info(f"Skipping combo #{combo_counter}: '{keyword}' in '{location}' (already completed)")
+                        continue
+                    elif combo_counter == resume_state["combo_counter"]:
+                        logger.info(f"Resuming from combo #{combo_counter}: '{keyword}' in '{location}'")
+                        resumed = True
+                
+                logger.info(f"\nScraping combo #{combo_counter}: '{keyword}' in '{location}'")
+                
+                # Scrape jobs for this combination
+                try:
+                    combo_jobs = job_scraper.scrape_jobs(keyword, location, job_count, time_filter)
+                    logger.info(f"Found {len(combo_jobs)} jobs for '{keyword}' in '{location}'")
+                    
+                    # Save progress - using global all_jobs list - periodic save without upload
+                    state_manager.save_jobs_periodic(all_jobs)
+                    state_manager.save_resume_point(combo_counter, keyword, location)
+                    
+                except Exception as e:
+                    logger.error(f"Error scraping '{keyword}' in '{location}': {e}")
+                    # Save what we have so far - force immediate save without upload
+                    if all_jobs:
+                        state_manager.save_jobs_periodic(all_jobs, 0)
+                
+        # Final save of all jobs - this is the only place we should upload to Drive normally
+        if all_jobs:
+            state_manager.save_jobs(all_jobs, is_final=True)
+            state_manager.rename_file_complete()
+            state_manager.delete_resume_point()
+            
+    except KeyboardInterrupt:
+        logger.warning("Scraping interrupted by user")
+        state_manager.handle_keyboard_interrupt(all_jobs)
+        sys.exit(1)
+        
+    return all_jobs
+
+def main():
+    """Main entry point for the LinkedIn scraper."""
+    logger.info("Starting LinkedIn Job Scraper (Headless)")
+    
+    # Step 1: Verify credentials
+    if not USERNAME or not PASSWORD:
+        logger.error("LinkedIn credentials not found. Set LINKEDIN_USERNAME and LINKEDIN_PASSWORD env vars.")
+        sys.exit(1)
+    
+    # Step 2: Set scraping parameters from config (derived from command-line args)
+    max_workers = MAX_WORKERS
+    time_filter = DEFAULT_TIME_FILTER
+    job_count = DEFAULT_JOB_COUNT
+    
+    # Step 3: Get resume decision
+    state_manager = StateManager()
+    resume_state = state_manager.handle_resume_decision()
+    
+    logger.info(f"Using time filter: {time_filter // 86400} day(s), job count: {'unlimited' if job_count is None else job_count}, workers: {max_workers}")
+    
+    # Step 4: Main scraping process with reconnection handling
+    try:
+        with sync_playwright() as p:
+            reconnect_attempts = 0
+            
+            while reconnect_attempts < MAX_RETRIES:
+                try:
+                    # Initialize browser manager for headless operation
+                    browser_manager = BrowserManager(p)
+                    page, context, browser = browser_manager.connect()
+                    
+                    # Initialize LinkedIn auth and log in
+                    auth = LinkedInAuth(USERNAME, PASSWORD)
+                    page, context = auth.login(page, context, browser)
+                    
+                    # Initialize job scraper with batch processing
+                    job_scraper = JobScraper(page, context, max_workers=max_workers)
+                    
+                    # Start scraping process based on resume state
+                    scraped_jobs = scrape_all_keywords(
+                        job_scraper, 
+                        FILTER_KEYWORDS, 
+                        LOCATIONS, 
+                        resume_state,
+                        time_filter,
+                        job_count,
+                        state_manager
+                    )
+                    
+                    logger.info(f"Scraping completed. Total jobs collected: {len(all_jobs)}")
+                    break  # Exit the reconnection loop if successful
+                    
+                except Exception as e:
+                    reconnect_attempts += 1
+                    logger.error(f"Fatal error (attempt {reconnect_attempts}/{MAX_RETRIES}): {e}")
+                    
+                    # Save any jobs we've collected so far - without upload
+                    if all_jobs:
+                        state_manager.save_jobs_periodic(all_jobs, 0)
+                    
+                    if reconnect_attempts < MAX_RETRIES:
+                        retry_delay = 30  # seconds
+                        logger.info(f"Waiting {retry_delay} seconds before reconnection attempt...")
+                        time.sleep(retry_delay)
+    
+    except Exception as e:
+        logger.error(f"Critical error in main process: {e}")
+        # Ensure we save and upload any collected jobs - this is a final save with upload
+        if all_jobs:
+            saved_file = state_manager.save_jobs(all_jobs, is_final=True)
+            if saved_file:
+                logger.info(f"Emergency save completed to {saved_file}")
+    
+    finally:
+        logger.info("LinkedIn Job Scraper finished")
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="README.md">
+# LinkedIn Job Scraper (Headless Version)
+
+A modular, object-oriented LinkedIn job scraper built with Python and Playwright, optimized for headless operation.
+
+## Features
+
+- Runs in headless mode by default (browser invisible)
+- Scrape LinkedIn job listings based on keywords and locations
+- Modular, object-oriented architecture for maintainability
+- Anti-detection techniques to avoid blocking
+- Full error handling and recovery
+- State persistence with resume functionality
+- Progress visualization with tqdm
+- Auto-saving of results
+- Easily configurable through config.py
+- Parallel job processing with multi-threading
+- Optimized selectors for resilient data extraction
+
+## Prerequisites
+
+- Python 3.8+
+- LinkedIn account credentials
+
+## Installation
+
+1. Clone the repository
+2. Install dependencies:
+```bash
+pip install playwright pandas tqdm structlog
+playwright install chromium
+```
+
+3. Set environment variables:
+```bash
+export LINKEDIN_USERNAME="your_email@example.com"
+export LINKEDIN_PASSWORD="your_password"
+```
+
+## Project Structure
+
+The scraper uses a modular design with clear separation of concerns:
+
+- `config.py` - Configuration settings and constants
+- `browser_utils.py` - Browser management and connection handling
+- `linkedin_auth.py` - LinkedIn authentication and session management
+- `job_details.py` - Job details extraction functionality with optimized selectors
+- `job_scraper.py` - Core job search and scraping logic with batch processing
+- `state_manager.py` - State persistence and resume handling
+- `main.py` - Main entry point orchestrating the scraping process
+
+## Performance Optimizations
+
+### Optimized Selectors
+- Multiple selectors for each data point to handle LinkedIn's UI variations
+- Faster element detection with unified selector strategies
+- Resilient to UI changes with hierarchical fallbacks
+
+### Batch Processing
+- Parallel job detail extraction using multiple browser contexts
+- Configurable number of worker threads (1-5)
+- Efficient job deduplication using job IDs
+- Smart thread pooling to maximize performance while minimizing resource usage
+
+### Headless Mode Optimizations
+- Anti-detection techniques to avoid Playwright/Selenium detection
+- Custom user agent configuration
+- Browser fingerprint modifications
+- Automated screenshot capturing for debugging
+- Security challenge detection
+
+## Usage
+
+### Command-line Arguments
+
+The scraper supports various command-line arguments for configuration:
+
+```bash
+python main.py [OPTIONS]
+```
+
+Options:
+- `--headed`: Run in headed mode (browser visible) instead of headless
+- `--username USERNAME`: LinkedIn username (overrides environment variable)
+- `--password PASSWORD`: LinkedIn password (overrides environment variable)
+- `--days DAYS`: Number of days to filter jobs (default: 1)
+- `--jobs JOBS`: Maximum number of jobs to scrape per keyword+location combo
+- `--workers WORKERS`: Number of parallel workers (1-5, default: 1)
+
+Examples:
+```bash
+# Run in default headless mode
+python main.py
+
+# Run in headed mode for debugging
+python main.py --headed
+
+# Run with specific job age filter and worker count
+python main.py --days 7 --workers 3
+
+# Run with specific credentials
+python main.py --username your@email.com --password yourpassword
+```
+
+### Interactive Prompts
+
+After starting the scraper, you'll be prompted to specify:
+- Number of days to look back for jobs (1-30)
+- Number of jobs to scrape per keyword-location combination (leave blank for all)
+- Number of parallel workers (1-5, default=1)
+
+## Headless vs. Headed Mode
+
+This version is optimized for headless operation, but also supports headed mode:
+
+### Headless Mode (default)
+- Runs without a visible browser window
+- Better performance and resource usage
+- Works well for environments without a display (servers, CI/CD)
+- Uses anti-detection techniques to avoid being blocked
+
+### Headed Mode
+- Shows the browser window during scraping
+- Allows for visual debugging and monitoring
+- Required for solving CAPTCHA or security challenges
+- Helpful for debugging extraction issues
+
+**Note:** If you encounter security challenges in headless mode, the scraper will detect this and suggest switching to headed mode.
+
+## Customization
+
+Edit `config.py` to modify:
+- Keywords to search for
+- Locations to search in
+- Timeout values
+- Logging settings
+- Output paths
+- Browser options and anti-detection settings
+
+## Output
+
+Jobs are saved to Excel files in the `output/YYYY-MM-DD/` directory with timestamps. A successful full run will append `_COMPLETE` to the filename.
+
+## Batch Processing Performance
+
+The parallel processing capability can significantly improve performance:
+- 1 worker: Baseline performance (sequential processing)
+- 2 workers: ~1.7x speed improvement
+- 3 workers: ~2.2x speed improvement  
+- 4 workers: ~2.5x speed improvement
+- 5 workers: ~2.7x speed improvement
+
+Note: Performance gains may vary based on your system resources and network conditions. Using too many workers might cause rate limiting from LinkedIn's servers.
+
+## Error Handling
+
+The scraper includes comprehensive error handling:
+- Browser connection recovery
+- Session validation
+- Security challenge detection
+- Graceful termination with state saving
+- Retry mechanisms for transient failures
+- Thread-safe job tracking
+- Automatic screenshot capture for debugging
+
+## License
+
+MIT
+
+## Disclaimer
+
+This tool is for educational purposes only. Use responsibly and in accordance with LinkedIn's terms of service.
+</file>
+
+<file path="requirements.txt">
+playwright==1.35.0
+pandas==2.0.2
+tqdm==4.65.0
+structlog==23.1.0
+openpyxl==3.1.2
+google-api-python-client==2.90.0
+nest_asyncio==1.5.6
+</file>
+
+<file path="state_manager.py">
+import os
+import json
+import time
+import threading
+import sys
+from datetime import datetime
+from typing import Dict, Any, Optional, List, Tuple
+import pandas as pd
+
+from config import logger, RESUME_FILE, OUTPUT_FOLDER, RESUME_TIMEOUT
+from upload_to_drive import upload_to_drive
+
+class StateManager:
+    """Handles state management for the LinkedIn scraper."""
+    
+    def __init__(self):
+        self.filename = None
+        self.last_save_time = time.time()
+        self.final_upload_completed = False
+        
+    def save_resume_point(self, combo_counter: int, keyword: str, location: str) -> None:
+        """
+        Save the current scraping state to resume later.
+        
+        Args:
+            combo_counter: Current combination counter
+            keyword: Current keyword being processed
+            location: Current location being processed
+        """
+        state = {
+            "combo_counter": combo_counter,
+            "keyword": keyword,
+            "location": location,
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        try:
+            with open(RESUME_FILE, "w") as f:
+                json.dump(state, f)
+            logger.info(f"Saved resume point at combo #{combo_counter}: '{keyword}' in '{location}'")
+        except Exception as e:
+            logger.warning(f"Failed to save resume point: {e}")
+            
+    def load_resume_point(self) -> Optional[Dict[str, Any]]:
+        """
+        Load previously saved resume point if available.
+        
+        Returns:
+            Dictionary with resume state or None if no resume file exists
+        """
+        if not os.path.exists(RESUME_FILE):
+            return None
+            
+        try:
+            with open(RESUME_FILE, "r") as f:
+                state = json.load(f)
+                logger.info(f"Found resume point: combo #{state['combo_counter']} at '{state['keyword']}' / '{state['location']}'")
+                return state
+        except Exception as e:
+            logger.warning(f"Failed to load resume point: {e}")
+            return None
+            
+    def delete_resume_point(self) -> None:
+        """Delete resume file after complete scraping."""
+        if os.path.exists(RESUME_FILE):
+            try:
+                os.remove(RESUME_FILE)
+                logger.info("Deleted resume point")
+            except Exception as e:
+                logger.warning(f"Failed to delete resume file: {e}")
+                
+    def handle_resume_decision(self) -> Optional[Dict[str, Any]]:
+        """
+        If resume file exists, ask user if they want to resume or start fresh.
+        
+        Returns:
+            Resume state dictionary or None to start fresh
+        """
+        if not os.path.exists(RESUME_FILE):
+            return None
+            
+        try:
+            state = self.load_resume_point()
+            if not state:
+                return None
+                
+            # Make the resume prompt more visible
+            print("\n" + "=" * 80)
+            print("RESUME FILE FOUND!".center(80))
+            print("=" * 80)
+            print(f"Last scrape stopped at: Keyword '{state['keyword']}' in '{state['location']}'")
+            print(f"Combo #{state['combo_counter']}")
+            if state.get('timestamp'):
+                print(f"Timestamp: {state['timestamp']}")
+            print("=" * 80)
+            
+            # Set up a timer with user input
+            user_choice = {"answer": None}
+
+            def ask_input():
+                choice = input("\nWould you like to (R)esume or (F)resh start? [R/F] ").strip().lower()
+                user_choice["answer"] = choice
+
+            # Create and start the input thread
+            input_thread = threading.Thread(target=ask_input)
+            input_thread.daemon = True
+            input_thread.start()
+            
+            # Wait for input with timeout
+            timeout = RESUME_TIMEOUT  # seconds
+            start_time = time.time()
+            remaining = timeout
+            
+            # Show countdown while waiting for input
+            while input_thread.is_alive() and remaining > 0:
+                sys.stdout.write(f"\rAuto-starting fresh in {int(remaining)} seconds... ")
+                sys.stdout.flush()
+                time.sleep(0.5)
+                remaining = timeout - (time.time() - start_time)
+            
+            # Clear the countdown line
+            sys.stdout.write("\r" + " " * 50 + "\r")
+            sys.stdout.flush()
+            
+            # Process the choice
+            choice = user_choice["answer"]
+            
+            if choice == "r":
+                logger.info("Resuming previous scrape")
+                return state
+            elif choice == "f":
+                logger.info("Starting fresh as selected by user")
+                self.delete_resume_point()
+                return None
+            else:
+                # Timeout or invalid input
+                logger.info("No valid input received — starting fresh automatically")
+                self.delete_resume_point()
+                return None
+                
+        except Exception as e:
+            logger.warning(f"Failed to process resume point: {e}")
+            return None
+            
+    def save_jobs_no_upload(self, jobs: List[Dict[str, Any]], filename: Optional[str] = None) -> str:
+        """
+        Save jobs to XLSX file without uploading to Drive (for periodic saves).
+        
+        Args:
+            jobs: List of job dictionaries to save
+            filename: Optional filename to save to (will overwrite)
+            
+        Returns:
+            Path to saved file
+        """
+        if not jobs:
+            logger.warning("No jobs to save")
+            return self.filename or ""
+        
+        # Create dated folder inside output
+        date_folder = datetime.now().strftime("%Y-%m-%d")
+        full_output_dir = os.path.join(OUTPUT_FOLDER, date_folder)
+        os.makedirs(full_output_dir, exist_ok=True)
+
+        if filename is None:
+            timestamp = datetime.now().strftime("%d-%m-%Y_%H%M")
+            filename = os.path.join(full_output_dir, f"linkedin_jobs_{timestamp}.xlsx")
+        
+        try:
+            # Create DataFrame
+            df = pd.DataFrame(jobs)
+            
+            # Create a Pandas Excel writer using the openpyxl engine
+            writer = pd.ExcelWriter(filename, engine='openpyxl')
+            
+            # Write DataFrame to Excel
+            df.to_excel(writer, index=False, sheet_name='LinkedIn Jobs')
+            
+            # Get the worksheet object
+            worksheet = writer.sheets['LinkedIn Jobs']
+            
+            # Import necessary openpyxl styles for formatting
+            from openpyxl.styles import Font, PatternFill
+            
+            # Create hyperlink font style
+            hyperlink_font = Font(color="0563C1", underline="single")
+            
+            # Identify URL columns for hyperlinking
+            url_columns = []
+            for i, col in enumerate(df.columns):
+                if 'url' in col.lower() or 'link' in col.lower():
+                    url_columns.append((i, col))
+            
+            # Add hyperlinks to URL columns
+            for row_num in range(2, len(df) + 2):  # +2 because Excel is 1-indexed and has a header row
+                for col_idx, col_name in url_columns:
+                    col_letter = chr(65 + col_idx)  # Convert to Excel column letter (A, B, C, etc.)
+                    cell_pos = f"{col_letter}{row_num}"
+                    url_value = df.iloc[row_num-2, col_idx]
+                    
+                    if url_value and isinstance(url_value, str) and (url_value.startswith('http://') or url_value.startswith('https://')):
+                        # Set hyperlink and formatting
+                        worksheet[cell_pos].hyperlink = url_value
+                        worksheet[cell_pos].font = hyperlink_font
+            
+            # Save the Excel file
+            writer.close()
+            
+            self.filename = filename
+            logger.info(f"Saved {len(jobs)} jobs to {filename} with clickable hyperlinks")
+            
+        except Exception as e:
+            logger.error(f"Failed to save jobs: {e}")
+            
+        return self.filename
+    
+    def save_jobs(self, jobs: List[Dict[str, Any]], filename: Optional[str] = None, is_final: bool = True) -> str:
+        """
+        Save jobs to XLSX file and optionally upload to Drive (for final saves).
+        
+        Args:
+            jobs: List of job dictionaries to save
+            filename: Optional filename to save to (will overwrite)
+            is_final: Whether this is the final save that should be uploaded
+            
+        Returns:
+            Path to saved file
+        """
+        # First, save the file locally
+        saved_file = self.save_jobs_no_upload(jobs, filename)
+        
+        # If this is the final save and we haven't uploaded yet, upload to Drive
+        if is_final and not self.final_upload_completed and saved_file:
+            # Upload to Google Drive
+            drive_link = upload_to_drive(saved_file)
+            if drive_link:
+                logger.info(f"File uploaded to Google Drive: {drive_link}")
+                self.final_upload_completed = True
+            
+        return saved_file
+    
+    def save_jobs_periodic(self, jobs: List[Dict[str, Any]], interval_minutes: int = 10) -> Optional[str]:
+        """
+        Track time and periodically save jobs.
+        
+        Args:
+            jobs: List of job dictionaries to save
+            interval_minutes: How often to save (in minutes)
+            
+        Returns:
+            Path to saved file or None if no save occurred
+        """
+        current_time = time.time()
+        
+        # If enough time has passed or it's the first save
+        if current_time - self.last_save_time >= interval_minutes * 60:
+            if jobs:
+                # For periodic saves, use save_jobs_no_upload to avoid multiple uploads
+                if interval_minutes == 0:  # Force immediate save without upload
+                    self.filename = self.save_jobs(jobs, self.filename, is_final=False)
+                else:  # Regular periodic save
+                    self.filename = self.save_jobs_no_upload(jobs, self.filename)
+                    
+                logger.info(f"Auto-saved at {datetime.now().strftime('%H:%M:%S')}")
+                self.last_save_time = current_time
+                return self.filename
+        
+        return None
+    
+    def rename_file_complete(self) -> Optional[str]:
+        """
+        Rename the output file to indicate the scraping completed successfully.
+        
+        Returns:
+            Path to renamed file or None if rename failed
+        """
+        if not self.filename or not os.path.exists(self.filename):
+            return None
+            
+        base, ext = os.path.splitext(self.filename)
+        new_filename = f"{base}_COMPLETE{ext}"
+        
+        try:
+            os.rename(self.filename, new_filename)
+            logger.info(f"Renamed file to {new_filename} to indicate complete scraping")
+            self.filename = new_filename
+            
+            # Upload the final complete file to Google Drive if we haven't uploaded yet
+            if not self.final_upload_completed:
+                drive_link = upload_to_drive(new_filename)
+                if drive_link:
+                    logger.info(f"Final file uploaded to Google Drive: {drive_link}")
+                    self.final_upload_completed = True
+                
+            return new_filename
+        except Exception as e:
+            logger.error(f"Failed to rename file: {e}")
+            return self.filename
+            
+    def handle_keyboard_interrupt(self, jobs: List[Dict[str, Any]]) -> None:
+        """
+        Handle keyboard interrupt (CTRL+C) gracefully with clear resume instructions.
+        
+        Args:
+            jobs: List of job dictionaries to save before exiting
+        """
+        print("\n" + "=" * 80)
+        print("SCRAPING PAUSED - YOU CAN RESUME LATER".center(80))
+        print("=" * 80)
+        print("You pressed Ctrl+C to stop the scraping process.")
+        print("The current progress has been saved.")
+        print("Run the script again to see the resume option.")
+        print("=" * 80)
+        
+        # Save jobs if we have any
+        if jobs:
+            # Use save_jobs with is_final=True to ensure we upload only once
+            saved_file = self.save_jobs(jobs, self.filename, is_final=True)
+            
+        # Force a 3-second delay to make sure the message is seen
+        time.sleep(3)
+        
+        # Final confirmation
+        print("\nExiting now...")
+        time.sleep(1)
+</file>
+
+<file path="test_hyperlinks.py">
+#!/usr/bin/env python3
+"""
+Test script to generate Excel file with hyperlinks
+"""
+
+import pandas as pd
+from openpyxl.styles import Font
+import os
+
+def create_excel_with_hyperlinks(output_file='test_hyperlinks.xlsx'):
+    """Create a test Excel file with hyperlinks"""
+    
+    # Sample data
+    data = [
+        {
+            'Company LinkedIn URL': 'https://www.linkedin.com/company/test-company1',
+            'Job URL': 'https://www.linkedin.com/jobs/view/123456789',
+            'Hiring Manager URL': 'https://www.linkedin.com/in/test-manager1',
+            'Title': 'Python Developer',
+            'Company': 'Test Company 1'
+        },
+        {
+            'Company LinkedIn URL': 'https://www.linkedin.com/company/test-company2',
+            'Job URL': 'https://www.linkedin.com/jobs/view/987654321',
+            'Hiring Manager URL': 'https://www.linkedin.com/in/test-manager2',
+            'Title': 'Data Scientist',
+            'Company': 'Test Company 2'
+        }
+    ]
+    
+    # Create DataFrame
+    df = pd.DataFrame(data)
+    
+    # Create Excel writer
+    writer = pd.ExcelWriter(output_file, engine='openpyxl')
+    
+    # Write data to Excel
+    df.to_excel(writer, index=False, sheet_name='Jobs')
+    
+    # Get the worksheet
+    worksheet = writer.sheets['Jobs']
+    
+    # Create hyperlink style
+    hyperlink_font = Font(color="0563C1", underline="single")
+    
+    # Find URL columns
+    url_columns = []
+    for i, col in enumerate(df.columns):
+        if 'url' in col.lower() or 'link' in col.lower():
+            url_columns.append((i, col))
+            print(f"Found URL column: {col} at index {i}")
+    
+    # Add hyperlinks
+    for row_num in range(2, len(df) + 2):  # Excel is 1-indexed with header row
+        for col_idx, col_name in url_columns:
+            # Convert to Excel column reference (A, B, C, etc.)
+            col_letter = chr(65 + col_idx)
+            cell_pos = f"{col_letter}{row_num}"
+            
+            # Get URL value
+            url_value = df.iloc[row_num-2, col_idx]
+            
+            print(f"Setting hyperlink at {cell_pos}: {url_value}")
+            
+            # Set hyperlink and formatting
+            worksheet[cell_pos].hyperlink = url_value
+            worksheet[cell_pos].font = hyperlink_font
+    
+    # Save the Excel file
+    writer.close()
+    
+    print(f"Created Excel file with hyperlinks: {os.path.abspath(output_file)}")
+
+if __name__ == "__main__":
+    create_excel_with_hyperlinks()
+</file>
+
+<file path="test_upload_with_keyfile.py">
+#!/usr/bin/env python3
+"""
+Test script to upload an existing file to Google Drive using the service account file
+"""
+
+import os
+import json
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from config import logger
+
+# Path to the service account file
+SERVICE_ACCOUNT_FILE = "service-account.json"
+# Google Drive Folder ID (where to upload)
+FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "1N2DJlGgDpjTKV4SizuLqo4oxGKOxe5yO")
+
+def upload_to_drive_with_keyfile(file_path):
+    """
+    Upload a file to Google Drive using the service account file.
+    
+    Args:
+        file_path: Path to the file to upload
+        
+    Returns:
+        str: The Google Drive link to the uploaded file, or None if upload failed
+    """
+    try:
+        if not os.path.exists(file_path):
+            print(f"❌ File not found: {file_path}")
+            return None
+            
+        if not os.path.exists(SERVICE_ACCOUNT_FILE):
+            print(f"❌ Service account file not found: {SERVICE_ACCOUNT_FILE}")
+            return None
+            
+        print(f"Using service account file: {SERVICE_ACCOUNT_FILE}")
+        
+        # Load credentials from the service account file
+        creds = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE,
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        
+        # Build the Drive service
+        drive_service = build("drive", "v3", credentials=creds)
+        print("✅ Successfully authenticated with Google Drive")
+        
+        # Determine mime type based on file extension
+        file_extension = os.path.splitext(file_path)[1].lower()
+        
+        if file_extension == '.xlsx':
+            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            target_mime_type = "application/vnd.google-apps.spreadsheet"
+        elif file_extension == '.csv':
+            mime_type = "text/csv"
+            target_mime_type = "application/vnd.google-apps.spreadsheet"
+        else:
+            mime_type = "application/octet-stream"
+            target_mime_type = None
+            
+        # Prepare metadata
+        file_metadata = {
+            "name": os.path.basename(file_path),
+            "parents": [FOLDER_ID]
+        }
+        
+        # Set target mimetype for conversion to Google formats
+        if target_mime_type:
+            file_metadata["mimeType"] = target_mime_type
+            
+        media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
+        print(f"Uploading file: {file_path}")
+        
+        # Upload
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id,webViewLink"
+        ).execute()
+
+        drive_link = file.get("webViewLink")
+        print(f"✅ File uploaded to Drive: {drive_link}")
+        
+        return drive_link
+
+    except Exception as e:
+        print(f"❌ Upload failed: {e}")
+        return None
+
+def main():
+    # Path to the file from the logs
+    file_path = os.path.join("output", "2025-05-05", "linkedin_jobs_05-05-2025_0203_COMPLETE.xlsx")
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        print("Listing files in the output directory:")
+        
+        # List files in output to help find the correct file
+        for root, dirs, files in os.walk("output"):
+            for file in files:
+                if file.endswith(".xlsx"):
+                    print(f"Found: {os.path.join(root, file)}")
+        return
+    
+    # Try to upload the file
+    drive_link = upload_to_drive_with_keyfile(file_path)
+    
+    if drive_link:
+        print(f"✅ Success! File uploaded to: {drive_link}")
+    else:
+        print("❌ Upload failed. See the error details above.")
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="test_upload.py">
+#!/usr/bin/env python3
+"""
+Test script to upload an existing file to Google Drive
+"""
+
+import os
+import json
+import dotenv
+from upload_to_drive import upload_to_drive
+from config import logger
+
+def debug_json_cleaning():
+    """Debug and clean the JSON string from the environment"""
+    # Load environment variables
+    dotenv.load_dotenv()
+    
+    # Get the GDRIVE_KEY_JSON
+    gdrive_key_json = os.getenv("GDRIVE_KEY_JSON")
+    if not gdrive_key_json:
+        print("GDRIVE_KEY_JSON environment variable not set")
+        return None
+    
+    print(f"JSON Length: {len(gdrive_key_json)}")
+    print(f"Character at position 161: ASCII {ord(gdrive_key_json[161])}")
+    
+    # Try various cleaning approaches
+    
+    # Method 1: Replace literal \n with actual newlines
+    cleaned_json1 = gdrive_key_json.replace('\\n', '\n')
+    
+    # Method 2: Remove ALL control characters (only keep printable characters)
+    cleaned_json2 = ''.join(c for c in gdrive_key_json if c >= ' ')
+    
+    # Method 3: Replace line breaks and tabs with spaces
+    cleaned_json3 = gdrive_key_json.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+    
+    # Method 4: Extreme cleaning - strip all non-alphanumeric characters except for essential JSON syntax
+    import re
+    cleaned_json4 = re.sub(r'[^\x20-\x7E]', '', gdrive_key_json)
+    
+    # Try parsing each version
+    methods = [
+        ("Original", gdrive_key_json),
+        ("Method 1: Replace \\n", cleaned_json1),
+        ("Method 2: Remove control chars", cleaned_json2),
+        ("Method 3: Replace breaks with spaces", cleaned_json3),
+        ("Method 4: Regex cleaning", cleaned_json4)
+    ]
+    
+    for name, json_str in methods:
+        try:
+            data = json.loads(json_str)
+            print(f"✅ {name} - Successfully parsed JSON")
+            return json_str
+        except json.JSONDecodeError as e:
+            print(f"❌ {name} - Failed: {e}")
+    
+    return None
+
+def main():
+    # First try to debug and clean the JSON
+    print("==== Debugging JSON parsing ====")
+    clean_json = debug_json_cleaning()
+    
+    if not clean_json:
+        print("Could not clean JSON. Please fix your GDRIVE_KEY_JSON in .env")
+        return
+    
+    print("\n==== Testing file upload ====")
+    # Path to the file from the logs
+    file_path = os.path.join("output", "2025-05-05", "linkedin_jobs_05-05-2025_0203_COMPLETE.xlsx")
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        print(f"File not found: {file_path}")
+        print("Listing files in the output directory:")
+        
+        # List files in output to help find the correct file
+        for root, dirs, files in os.walk("output"):
+            for file in files:
+                if file.endswith(".xlsx"):
+                    print(f"Found: {os.path.join(root, file)}")
+        return
+    
+    print(f"Uploading file: {file_path}")
+    
+    # Try to upload the file
+    drive_link = upload_to_drive(file_path)
+    
+    if drive_link:
+        print(f"✅ Success! File uploaded to: {drive_link}")
+    else:
+        print("❌ Upload failed. Check the logs for details.")
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="upload_to_drive.py">
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+import json
+import os
+import requests
+import dotenv
+import re
+from config import logger
+
+# Load environment variables
+dotenv.load_dotenv()
+
+# Google Drive Folder ID (where to upload)
+FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "1N2DJlGgDpjTKV4SizuLqo4oxGKOxe5yO")
+
+# Path to the service account file
+SERVICE_ACCOUNT_FILE = "service-account.json"
+
+def find_or_create_folder(drive_service, name, parent_id):
+    """
+    Find a folder in Google Drive or create it if it doesn't exist.
+    
+    Args:
+        drive_service: The Google Drive service instance
+        name: Name of the folder to find/create
+        parent_id: ID of the parent folder
+        
+    Returns:
+        str: The folder ID
+    """
+    # Check if folder already exists
+    query = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and '{parent_id}' in parents and trashed=false"
+    results = drive_service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    
+    if results.get('files'):
+        # Folder exists, return its ID
+        return results.get('files')[0].get('id')
+    else:
+        # Create folder
+        folder_metadata = {
+            'name': name,
+            'mimeType': 'application/vnd.google-apps.folder',
+            'parents': [parent_id]
+        }
+        folder = drive_service.files().create(
+            body=folder_metadata,
+            fields='id'
+        ).execute()
+        return folder.get('id')
+
+def create_folder_path(drive_service, path_parts, parent_id=None):
+    """
+    Create a folder path in Google Drive, creating each folder if it doesn't exist.
+    
+    Args:
+        drive_service: The Google Drive service instance
+        path_parts: List of folder names in order
+        parent_id: ID of the starting parent folder
+        
+    Returns:
+        str: The ID of the deepest folder
+    """
+    current_parent = parent_id or FOLDER_ID
+    
+    for folder_name in path_parts:
+        if folder_name:  # Skip empty folder names
+            current_parent = find_or_create_folder(drive_service, folder_name, current_parent)
+    
+    return current_parent
+
+def upload_to_drive(file_path):
+    """
+    Upload a file to Google Drive following the same folder structure as the local file.
+    Supports both Excel files and CSV files.
+    Sends a Telegram alert on success or failure.
+    
+    Args:
+        file_path: Path to the file to upload
+        
+    Returns:
+        str: The Google Drive link to the uploaded file, or None if upload failed
+    """
+    try:
+        if not os.path.exists(file_path):
+            logger.error(f"❌ File not found: {file_path}")
+            notify_telegram(f"❌ *Upload failed:* File not found:\n`{file_path}`")
+            return None
+
+        # Check if the service account file exists
+        if not os.path.exists(SERVICE_ACCOUNT_FILE):
+            logger.error(f"❌ Service account file not found: {SERVICE_ACCOUNT_FILE}")
+            notify_telegram(f"❌ *Upload failed:* Service account file not found.")
+            return None
+        
+        try:
+            # Load credentials from the service account file directly
+            creds = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=["https://www.googleapis.com/auth/drive"]
+            )
+            drive_service = build("drive", "v3", credentials=creds)
+            logger.info("Authentication with Google Drive successful")
+        except Exception as e:
+            logger.error(f"❌ Failed to authenticate with Google Drive: {e}")
+            notify_telegram(f"❌ *Upload failed:* Google Drive authentication error:\n`{e}`")
+            return None
+
+        # Determine mime type based on file extension
+        file_extension = os.path.splitext(file_path)[1].lower()
+        
+        if file_extension == '.xlsx':
+            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            target_mime_type = "application/vnd.google-apps.spreadsheet"
+        elif file_extension == '.csv':
+            mime_type = "text/csv"
+            target_mime_type = "application/vnd.google-apps.spreadsheet"
+        else:
+            # For other file types, upload as is
+            mime_type = "application/octet-stream"
+            target_mime_type = None
+            
+        # Create folder structure in Google Drive
+        # Extract relative path from full path (assuming it's in OUTPUT_FOLDER)
+        from config import OUTPUT_FOLDER
+        rel_path = os.path.dirname(file_path)
+        
+        # Check if the file is in the output folder
+        if OUTPUT_FOLDER in rel_path:
+            # Extract the path relative to the output folder
+            rel_path = rel_path.split(OUTPUT_FOLDER)[-1].strip(os.sep)
+            
+            # Split the relative path into parts
+            path_parts = rel_path.split(os.sep) if rel_path else []
+            
+            # Create folder structure and get the parent folder ID
+            parent_id = create_folder_path(drive_service, path_parts)
+        else:
+            # If not in output folder, use root folder
+            parent_id = FOLDER_ID
+
+        # Prepare metadata
+        file_metadata = {
+            "name": os.path.basename(file_path),
+            "parents": [parent_id]
+        }
+        
+        # Set target mimetype for conversion to Google formats
+        if target_mime_type:
+            file_metadata["mimeType"] = target_mime_type
+            
+        media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
+
+        # Upload
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id,webViewLink"
+        ).execute()
+
+        drive_link = file.get("webViewLink")
+        logger.info(f"✅ File uploaded to Drive: {drive_link}")
+
+        # Telegram success notification
+        notify_telegram(f"✅ *LinkedIn Scraper (Headless): Upload successful!*\n\n`{os.path.basename(file_path)}`\n[📄 Open in Drive]({drive_link})")
+        
+        return drive_link
+
+    except Exception as e:
+        logger.error(f"❌ Upload failed: {e}")
+        notify_telegram(f"❌ *LinkedIn Scraper (Headless): Upload to Google Drive failed!*\n\nError:\n`{str(e)}`")
+        return None
+
+def upload_screenshot_to_drive(image_path, drive_folder_id=None):
+    """
+    Upload a PNG screenshot to Google Drive.
+    
+    Args:
+        image_path: Path to the screenshot file
+        drive_folder_id: Optional folder ID to upload to (defaults to FOLDER_ID)
+        
+    Returns:
+        str: The Google Drive link to the uploaded screenshot, or None if upload failed
+    """
+    try:
+        if not os.path.exists(image_path):
+            logger.error(f"❌ Screenshot not found: {image_path}")
+            return None
+
+        # Check if the service account file exists
+        if not os.path.exists(SERVICE_ACCOUNT_FILE):
+            logger.error(f"❌ Service account file not found: {SERVICE_ACCOUNT_FILE}")
+            return None
+        
+        try:
+            # Load credentials from the service account file directly
+            creds = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=["https://www.googleapis.com/auth/drive"]
+            )
+            drive_service = build("drive", "v3", credentials=creds)
+        except Exception as e:
+            logger.error(f"❌ Failed to authenticate with Google Drive: {e}")
+            return None
+            
+        # If no specific folder ID, create folder structure based on image path
+        if not drive_folder_id:
+            from config import SCREENSHOT_FOLDER
+            rel_path = os.path.dirname(image_path)
+            
+            # Check if in screenshots folder
+            if SCREENSHOT_FOLDER in rel_path:
+                rel_path = rel_path.split(SCREENSHOT_FOLDER)[-1].strip(os.sep)
+                path_parts = rel_path.split(os.sep) if rel_path else []
+                
+                # Create folder named "screenshots" at root level
+                screenshots_folder_id = find_or_create_folder(drive_service, SCREENSHOT_FOLDER, FOLDER_ID)
+                
+                # Create the rest of the folder structure
+                parent_id = create_folder_path(drive_service, path_parts, screenshots_folder_id)
+            else:
+                parent_id = FOLDER_ID
+        else:
+            parent_id = drive_folder_id
+
+        file_metadata = {
+            "name": os.path.basename(image_path),
+            "parents": [parent_id]
+        }
+
+        media = MediaFileUpload(image_path, mimetype="image/png")
+
+        uploaded = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id,webViewLink"
+        ).execute()
+
+        logger.info(f"📤 Screenshot uploaded: {uploaded['webViewLink']}")
+        return uploaded["webViewLink"]
+
+    except Exception as e:
+        logger.error(f"❌ Failed to upload screenshot: {e}")
+        return None
+
+def notify_telegram(message):
+    """
+    Send a notification message to Telegram.
+    
+    Args:
+        message: The message to send
+        
+    Returns:
+        bool: True if message was sent successfully, False otherwise
+    """
+    try:
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+        if not token or not chat_id:
+            logger.warning("⚠️ Telegram credentials not set. Skipping alert.")
+            return False
+
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
+
+        r = requests.post(url, json=payload)
+        if r.status_code == 200:
+            logger.info("📨 Telegram alert sent.")
+            return True
+        else:
+            logger.warning(f"⚠️ Failed to send Telegram alert: {r.text}")
+            return False
+
+    except Exception as e:
+        logger.error(f"❌ Telegram notification error: {e}")
+        return False
+</file>
+
+</files>

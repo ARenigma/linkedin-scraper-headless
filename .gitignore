@@ -88,7 +88,7 @@ screenshots/
 Thumbs.db
 
 # Google service account
-service-account.json
+#service-account.json
 
 # State files
 resume_state.json
