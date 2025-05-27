@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 import os
 import urllib.parse
+import json
 
 from config import logger, DEFAULT_TIMEOUT, DEFAULT_WAIT, SHORT_WAIT
 from job_details import JobDetailsExtractor
@@ -159,6 +160,14 @@ class JobScraper:
                 # Move to next page
                 start += 25
                 
+        # After scraping jobs, refresh cookies
+        try:
+            from browser_utils import BrowserManager
+            BrowserManager(None).save_cookies(self.context)
+        except Exception as e:
+            logger.warning(f"Error saving cookies after scraping: {e}")
+            pass
+            
         return jobs
     
     def _collect_job_card_data(self, job_cards, total_cards) -> List[tuple]:
@@ -635,4 +644,4 @@ class JobScraper:
                 
         logger.info(f"{'='*50}\n")
         
-        return results 
+        return results

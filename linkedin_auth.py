@@ -1,5 +1,6 @@
 import os
 import time
+import json
 from typing import Tuple
 from datetime import datetime
 from playwright.sync_api import Page, BrowserContext
@@ -41,106 +42,66 @@ class LinkedInAuth:
     
     def login(self, page: Page, context: BrowserContext, browser) -> Tuple[Page, BrowserContext]:
         """Main authentication flow."""
-        logger.info("Checking LinkedIn login status")
+        logger.info("Checking LinkedIn login status (cookie-first logic)")
+        # 1. Try to use cookies first
+        try:
+            page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+            page.wait_for_timeout(DEFAULT_WAIT)
+            self._set_evasions(page)
+            self._take_screenshot(page, "cookie_login_attempt")
+            if self._check_logged_in(page):
+                logger.info("✅ Logged in using cookies! Skipping credential login.")
+                self.save_cookies(context)
+                return page, context
+            else:
+                logger.info("Cookies not valid or session expired, proceeding with credential login.")
+        except Exception as e:
+            logger.warning(f"Error during cookie login attempt: {e}")
+            # Proceed to credential login
+        # 2. Fallback to normal login flow
         max_attempts = 3
-        
         for attempt in range(max_attempts):
             try:
                 logger.info(f"LinkedIn login attempt {attempt+1}/{max_attempts}")
-                
-                # Go directly to login page for more reliability in headless mode
                 page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
                 page.wait_for_timeout(DEFAULT_WAIT)
-                
-                # Set evasions
                 self._set_evasions(page)
-                
-                # Take screenshot for debugging
                 self._take_screenshot(page, f"login_before_{attempt+1}")
-                
-                # Check if already logged in by looking at URL
-                if "linkedin.com/feed" in page.url:
-                    logger.info("Already on feed URL, checking login status...")
-                    # Give elements time to load if we're already on feed page
-                    page.wait_for_timeout(3000)
-                    if self._check_logged_in(page):
-                        logger.info("✅ Already logged in to LinkedIn!")
-                        return page, context
-                    else:
-                        logger.info("On feed URL but not fully logged in yet, waiting...")
-                        # Wait a bit longer for elements to load 
-                        page.wait_for_timeout(5000)
-                        if self._check_logged_in(page):
-                            logger.info("✅ Successfully logged in to LinkedIn after waiting!")
-                            return page, context
-                
-                # If on login page, perform login
                 if self._is_on_login_page(page):
                     logger.info("🔑 Login form detected, filling credentials...")
                     self._perform_login(page)
-                    
-                    # Take screenshot after login attempt
                     self._take_screenshot(page, f"login_after_{attempt+1}")
-                    
-                    # Check for security challenges
                     if self._is_security_challenge(page):
                         error_msg = "LinkedIn security challenge detected!"
                         logger.error(f"🚨 {error_msg} Cannot proceed in headless mode.")
                         self._take_screenshot(page, "security_challenge")
                         raise Exception(f"{error_msg} Try running in headed mode.")
-                    
-                    # Check if we've been redirected to feed URL, even if elements aren't loaded yet
                     if "linkedin.com/feed" in page.url:
                         logger.info("Redirected to feed URL after login, waiting for elements...")
-                        # Extended wait for feed elements to load
                         page.wait_for_timeout(5000)
-                    
-                    # Check if login successful
                     if self._check_logged_in(page):
                         logger.info("✅ Successfully logged in to LinkedIn!")
+                        self.save_cookies(context)
                         return page, context
-                    
-                    # One more check with feed URL (URL might be correct but elements not loaded)
-                    if "linkedin.com/feed" in page.url:
-                        logger.info("On feed URL but login check failed, trying again after a longer wait...")
-                        page.wait_for_timeout(8000)  # Extended wait
-                        if self._check_logged_in(page):
-                            logger.info("✅ Successfully logged in to LinkedIn after extended wait!")
-                            return page, context
-                        else:
-                            logger.warning(f"⚠️ On feed URL but login elements not detected after extended wait")
-                    else:
-                        logger.warning(f"⚠️ Login attempt {attempt+1} failed, current URL: {page.url}")
-                else:
-                    # If not on login page but also not logged in, try direct navigation to feed
-                    logger.info("Not on login page, trying to navigate to feed")
-                    page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
-                    
-                    # Extended wait for feed to load
-                    page.wait_for_timeout(5000)
-                    
-                    if self._check_logged_in(page):
-                        logger.info("✅ Successfully logged in to LinkedIn!")
-                        return page, context
-            
-                # Wait before retry
+                # If not on login page but also not logged in, try direct navigation to feed
+                logger.info("Not on login page, trying to navigate to feed")
+                page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+                page.wait_for_timeout(5000)
+                if self._check_logged_in(page):
+                    logger.info("✅ Successfully logged in to LinkedIn!")
+                    self.save_cookies(context)
+                    return page, context
                 page.wait_for_timeout(3000)
-                
             except Exception as e:
                 logger.error(f"❌ Login error on attempt {attempt+1}: {e}")
-                
-                # Try with a new context for the next attempt
                 if attempt < max_attempts - 1:
                     try:
                         context.close()
                     except:
                         pass
-                        
                     context = browser.new_context(user_agent=USER_AGENT)
                     page = context.new_page()
                     self._set_evasions(page)
-        
-        # If all attempts failed
         logger.error("❌ All login attempts failed! Could not log in to LinkedIn.")
         raise Exception("Failed to log in to LinkedIn after multiple attempts")
             
@@ -428,4 +389,14 @@ class LinkedInAuth:
             
         except Exception as e:
             logger.error(f"Fresh context login failed: {e}")
-            raise 
+            raise
+    
+    def save_cookies(self, context, cookies_path="cookies.json"):
+        """Save cookies from the browser context to a file."""
+        try:
+            cookies = context.cookies()
+            with open(cookies_path, "w", encoding="utf-8") as f:
+                json.dump(cookies, f, indent=2)
+            logger.info(f"Saved cookies to {cookies_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save cookies: {e}")

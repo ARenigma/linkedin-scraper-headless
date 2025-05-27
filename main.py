@@ -71,8 +71,12 @@ def scrape_all_keywords(
                     
                     # Save progress - using global all_jobs list - periodic save without upload
                     state_manager.save_jobs_periodic(all_jobs)
-                    state_manager.save_resume_point(combo_counter, keyword, location)
                     
+                    # Save cookies after each scrape
+                    if hasattr(job_scraper, 'context'):
+                        from browser_utils import BrowserManager
+                        BrowserManager(None).save_cookies(job_scraper.context)
+                
                 except Exception as e:
                     logger.error(f"Error scraping '{keyword}' in '{location}': {e}")
                     # Save what we have so far - force immediate save without upload
@@ -169,4 +173,4 @@ def main():
         logger.info("LinkedIn Job Scraper finished")
 
 if __name__ == "__main__":
-    main() 
+    main()
