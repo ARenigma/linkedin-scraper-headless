@@ -80,7 +80,7 @@ MAX_WORKERS = args.workers or 1  # Default to 1 worker
 
 # Browser options for avoiding detection
 BROWSER_OPTIONS = {
-    "headless": True,
+    "headless": False,
     "args": [
         "--disable-blink-features=AutomationControlled",
         "--no-sandbox",
