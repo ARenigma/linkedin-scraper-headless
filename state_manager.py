@@ -92,6 +92,30 @@ class StateManager:
             print(f"Combo #{state['combo_counter']}")
             if state.get('timestamp'):
                 print(f"Timestamp: {state['timestamp']}")
+            
+            # Check for existing output files to give more context
+            date_folder = datetime.now().strftime("%Y-%m-%d")
+            full_output_dir = os.path.join(OUTPUT_FOLDER, date_folder)
+            
+            if os.path.exists(full_output_dir):
+                files = [f for f in os.listdir(full_output_dir) if f.endswith('.xlsx')]
+                interim_files = [f for f in files if '_INTERIM' in f]
+                complete_files = [f for f in files if '_COMPLETE' in f]
+                error_files = [f for f in files if '_ERROR' in f]
+                
+                if interim_files:
+                    print(f"\nFound {len(interim_files)} interim result file(s) from previous runs.")
+                    print(f"Most recent: {interim_files[-1]}")
+                    
+                if error_files:
+                    print(f"\nFound {len(error_files)} error result file(s) from previous runs.")
+                    print(f"Most recent: {error_files[-1]}")
+                    print("These files were saved when the scraper encountered fatal errors.")
+                    
+                if complete_files:
+                    print(f"\nFound {len(complete_files)} completed result file(s) from previous runs.")
+                    print(f"Most recent: {complete_files[-1]}")
+                    
             print("=" * 80)
             
             # Set up a timer with user input
@@ -167,6 +191,24 @@ class StateManager:
             filename = os.path.join(full_output_dir, f"linkedin_jobs_{timestamp}.xlsx")
         
         try:
+            # Remove duplicate jobs by Job ID if available
+            unique_jobs = []
+            job_ids = set()
+            
+            for job in jobs:
+                job_id = job.get("Job ID")
+                # If job has an ID and it's not already in our set, add it to unique jobs
+                if job_id and job_id not in job_ids:
+                    job_ids.add(job_id)
+                    unique_jobs.append(job)
+                # If job has no ID, keep it (old behavior)
+                elif not job_id:
+                    unique_jobs.append(job)
+                
+            if len(unique_jobs) < len(jobs):
+                logger.info(f"Removed {len(jobs) - len(unique_jobs)} duplicate jobs by Job ID")
+                jobs = unique_jobs
+            
             # Create DataFrame
             df = pd.DataFrame(jobs)
             
@@ -207,7 +249,7 @@ class StateManager:
             writer.close()
             
             self.filename = filename
-            logger.info(f"Saved {len(jobs)} jobs to {filename} with clickable hyperlinks")
+            logger.info(f"Saved {len(jobs)} jobs to {filename}")
             
         except Exception as e:
             logger.error(f"Failed to save jobs: {e}")
@@ -229,13 +271,21 @@ class StateManager:
         # First, save the file locally
         saved_file = self.save_jobs_no_upload(jobs, filename)
         
-        # If this is the final save and we haven't uploaded yet, upload to Drive
+        # Upload to Drive ONLY if it's an interim save (not the final complete save)
+        # Final complete files will be uploaded after renaming in rename_file_complete
         if is_final and not self.final_upload_completed and saved_file:
-            # Upload to Google Drive
-            drive_link = upload_to_drive(saved_file)
-            if drive_link:
-                logger.info(f"File uploaded to Google Drive: {drive_link}")
-                self.final_upload_completed = True
+            # Only upload if this is an interrupted save (not a successful completion)
+            # Check if we're in a keyboard interrupt handler
+            import inspect
+            stack = inspect.stack()
+            caller_name = stack[1].function if len(stack) > 1 else ""
+            
+            if caller_name == "handle_keyboard_interrupt":
+                # Upload to Google Drive for interrupted saves
+                drive_link = upload_to_drive(saved_file)
+                if drive_link:
+                    logger.info(f"INTERIM RESULTS: File uploaded to Google Drive: {drive_link}")
+                    self.final_upload_completed = True
             
         return saved_file
     
@@ -281,17 +331,35 @@ class StateManager:
         new_filename = f"{base}_COMPLETE{ext}"
         
         try:
-            os.rename(self.filename, new_filename)
+            # First try using os.rename which should replace the file
+            try:
+                os.rename(self.filename, new_filename)
+            except Exception as rename_error:
+                # If rename fails (can happen on some Windows setups), create a copy and delete original
+                logger.debug(f"Regular rename failed: {rename_error}. Trying copy and delete approach.")
+                import shutil
+                shutil.copy2(self.filename, new_filename)
+                
+                # Make sure the copy succeeded before deleting original
+                if os.path.exists(new_filename):
+                    # Delete the original file to avoid duplicates
+                    os.remove(self.filename)
+                else:
+                    raise Exception("Failed to create completed file copy")
+                
             logger.info(f"Renamed file to {new_filename} to indicate complete scraping")
             self.filename = new_filename
             
-            # Upload the final complete file to Google Drive if we haven't uploaded yet
-            if not self.final_upload_completed:
-                drive_link = upload_to_drive(new_filename)
-                if drive_link:
-                    logger.info(f"Final file uploaded to Google Drive: {drive_link}")
-                    self.final_upload_completed = True
-                
+            # Always upload the final complete file to Google Drive
+            # Reset the upload flag to ensure we upload the completed file
+            self.final_upload_completed = False
+            
+            # Upload the renamed complete file
+            drive_link = upload_to_drive(new_filename)
+            if drive_link:
+                logger.info(f"COMPLETE RESULTS: File uploaded to Google Drive: {drive_link}")
+                self.final_upload_completed = True
+            
             return new_filename
         except Exception as e:
             logger.error(f"Failed to rename file: {e}")
@@ -314,7 +382,34 @@ class StateManager:
         
         # Save jobs if we have any
         if jobs:
-            # Use save_jobs with is_final=True to ensure we upload only once
+            # If we already have a filename, add _INTERIM suffix if not present
+            if self.filename and os.path.exists(self.filename):
+                base, ext = os.path.splitext(self.filename)
+                if not "_INTERIM" in base:
+                    interim_filename = f"{base}_INTERIM{ext}"
+                    try:
+                        # First try using os.rename which should replace the file
+                        try:
+                            os.rename(self.filename, interim_filename)
+                        except Exception as rename_error:
+                            # If rename fails (can happen on some Windows setups), create a copy and delete original
+                            logger.debug(f"Regular rename failed: {rename_error}. Trying copy and delete approach.")
+                            import shutil
+                            shutil.copy2(self.filename, interim_filename)
+                            
+                            # Make sure the copy succeeded before deleting original
+                            if os.path.exists(interim_filename):
+                                # Delete the original file to avoid duplicates
+                                os.remove(self.filename)
+                            else:
+                                raise Exception("Failed to create interim file copy")
+                                
+                        self.filename = interim_filename
+                        logger.info(f"Renamed file to {interim_filename} to indicate interim results")
+                    except Exception as e:
+                        logger.warning(f"Failed to rename file as interim: {e}")
+            
+            # Use save_jobs with is_final=True to upload the interim file
             saved_file = self.save_jobs(jobs, self.filename, is_final=True)
             
         # Force a 3-second delay to make sure the message is seen
