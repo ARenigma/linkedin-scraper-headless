@@ -99,3 +99,6 @@ resume_state.json
 
 # Environment variables
 .env
+
+# base64 encoded files
+key_b64.txt
