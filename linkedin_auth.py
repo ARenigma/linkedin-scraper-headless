@@ -54,56 +54,15 @@ class LinkedInAuth:
                 self.save_cookies(context)
                 return page, context
             else:
-                logger.info("Cookies not valid or session expired, proceeding with credential login.")
+                logger.error("❌ Cookies not valid or session expired. Credential login fallback is not allowed in this environment. Exiting.")
+                import sys
+                sys.exit(1)
         except Exception as e:
             logger.warning(f"Error during cookie login attempt: {e}")
-            # Proceed to credential login
-        # 2. Fallback to normal login flow
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                logger.info(f"LinkedIn login attempt {attempt+1}/{max_attempts}")
-                page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
-                page.wait_for_timeout(DEFAULT_WAIT)
-                self._set_evasions(page)
-                self._take_screenshot(page, f"login_before_{attempt+1}")
-                if self._is_on_login_page(page):
-                    logger.info("🔑 Login form detected, filling credentials...")
-                    self._perform_login(page)
-                    self._take_screenshot(page, f"login_after_{attempt+1}")
-                    if self._is_security_challenge(page):
-                        error_msg = "LinkedIn security challenge detected!"
-                        logger.error(f"🚨 {error_msg} Cannot proceed in headless mode.")
-                        self._take_screenshot(page, "security_challenge")
-                        raise Exception(f"{error_msg} Try running in headed mode.")
-                    if "linkedin.com/feed" in page.url:
-                        logger.info("Redirected to feed URL after login, waiting for elements...")
-                        page.wait_for_timeout(5000)
-                    if self._check_logged_in(page):
-                        logger.info("✅ Successfully logged in to LinkedIn!")
-                        self.save_cookies(context)
-                        return page, context
-                # If not on login page but also not logged in, try direct navigation to feed
-                logger.info("Not on login page, trying to navigate to feed")
-                page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
-                page.wait_for_timeout(5000)
-                if self._check_logged_in(page):
-                    logger.info("✅ Successfully logged in to LinkedIn!")
-                    self.save_cookies(context)
-                    return page, context
-                page.wait_for_timeout(3000)
-            except Exception as e:
-                logger.error(f"❌ Login error on attempt {attempt+1}: {e}")
-                if attempt < max_attempts - 1:
-                    try:
-                        context.close()
-                    except:
-                        pass
-                    context = browser.new_context(user_agent=USER_AGENT)
-                    page = context.new_page()
-                    self._set_evasions(page)
-        logger.error("❌ All login attempts failed! Could not log in to LinkedIn.")
-        raise Exception("Failed to log in to LinkedIn after multiple attempts")
+            logger.error("❌ Could not use cookies for login. Credential login fallback is not allowed in this environment. Exiting.")
+            import sys
+            sys.exit(1)
+        # ...existing code for credential login fallback (now unreachable)...
             
     def _check_logged_in(self, page: Page) -> bool:
         """Check if user is logged in by looking for feed indicators."""
