@@ -102,3 +102,10 @@ resume_state.json
 
 # base64 encoded files
 key_b64.txt
+
+# secrets / data removed in history cleanup
+.env
+service-account*.json
+key_b64.txt
+cookies.json
+*.pem
